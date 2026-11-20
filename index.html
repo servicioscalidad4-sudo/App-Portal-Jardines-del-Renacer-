@@ -66,10 +66,12 @@ window.addEventListener('error',function(e){
 const PORTAL_CONFIG = {
   GAS_URL: 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PHXFG6qdxZCxnWalG5eg_GtscpntJ4w2U11tNEOca-QwTHnyg_YvKYw/exec'
 };
-// Catálogo de aplicaciones. Para sumar una app nueva: agrega un objeto aquí y su carpeta en /apps/.
+/* Catálogo de aplicaciones.
+   IMPORTANTE: la url debe coincidir EXACTAMENTE (mayúsculas, tildes, guiones) con el nombre
+   de la carpeta en GitHub. Carpetas actuales en la raíz del repo: Cafeteria y SS-Diarios. */
 const APPS = [
-  {id:'cafeteria',  nombre:'Cafetería Regional Quindío', icono:'☕', url:'apps/cafeteria/index.html',  desc:'Registro, liquidación y control de gastos de cafetería por sede.', roles:['ADMINISTRADOR','COORDINADOR','SEDE']},
-  {id:'ss_diarios', nombre:'Control diario de Ss',       icono:'📊', url:'apps/ss-diarios/index.html', desc:'Análisis y tabla de control de servicios diarios.',               roles:['EDITOR','LECTOR']}
+  {id:'cafeteria',  nombre:'Cafetería Regional Quindío', icono:'☕', url:'Cafeteria/index.html',  desc:'Registro, liquidación y control de gastos de cafetería por sede.', roles:['ADMINISTRADOR','COORDINADOR','SEDE']},
+  {id:'ss_diarios', nombre:'Control diario de Ss',       icono:'📊', url:'SS-Diarios/index.html', desc:'Análisis y tabla de control de servicios diarios.',               roles:['EDITOR','LECTOR']}
 ];
 const SEDES=['Armenia','Calarcá','Circasia','Córdoba','Génova','La Tebaida','Montenegro','Pijao','Quimbaya','Barcelona'];
 
@@ -141,7 +143,7 @@ function go(v){
   if(APPS.some(a=>a.id===v)&&!(ses.user.accesos&&ses.user.accesos[v]))v='home';
   cur=v;location.hash=v;document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
   const m=$('#main'),app=APPS.find(a=>a.id===v);
-  if(app){m.style.padding=0;m.innerHTML=`<iframe src="${app.url}" title="${esc(app.nombre)}"></iframe>`;return}
+  if(app){m.style.padding=0;m.innerHTML=`<iframe src="${encodeURI(app.url)}" title="${esc(app.nombre)}"></iframe>`;return}
   m.style.padding='';({home,users,perfil}[v]||home)();
 }
 function home(){
