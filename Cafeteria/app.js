@@ -734,7 +734,18 @@ function navigateTo(section) {
     const ov = document.getElementById('sidebar-overlay');
     if (ov) ov.classList.remove('show');
   }
+
+  // Avisa al portal en qué sección está, para resaltarla en su menú desplegable
+  try { if (window.parent !== window) window.parent.postMessage({ type: 'jr-nav', app: 'cafeteria', section }, '*'); } catch (e) {}
 }
+
+// El portal (menú desplegable) pide cambiar de sección
+window.addEventListener('message', (ev) => {
+  const d = ev.data;
+  if (!d || d.type !== 'jr-goto' || d.app !== 'cafeteria') return;
+  if (ev.source !== window.parent || !state.user) return;
+  if (typeof d.section === 'string' && document.getElementById('section-' + d.section)) navigateTo(d.section);
+});
 
 function toggleSidebar() {
   const abierto = document.getElementById('sidebar').classList.toggle('open');

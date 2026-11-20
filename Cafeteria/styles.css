@@ -842,3 +842,13 @@ textarea.form-control { height: auto; }
   .sidebar, .topbar, .toast-container, .btn { display: none !important; }
   .main-wrapper { margin-left: 0; }
 }
+
+
+/* --------------------------------------------------------------------------
+   MODO INCRUSTADO EN EL PORTAL: el menú vive en el portal (desplegable),
+   aquí se oculta el sidebar morado para conservar una sola identidad visual.
+   -------------------------------------------------------------------------- */
+html.portal-menu .sidebar,
+html.portal-menu .sidebar-overlay,
+html.portal-menu .btn-menu-toggle { display: none !important; }
+html.portal-menu .main-wrapper { margin-left: 0 !important; }
