@@ -3,14 +3,18 @@
 <head>
 <script src="../../portal-guard.js" data-app="cafeteria"></script>
   <script>
-    /* Dentro del portal el menú lateral lo muestra el propio portal (desplegable). */
+    /* Dentro del portal: menú en un panel blanco (botón de 3 líneas) con los colores del portal.
+       Si el portal tiene su propio desplegable lateral, avisa y el botón se oculta. */
     (function () {
-      function aplicar() {
-        var emb = false, ancho = 0;
-        try { emb = window.self !== window.top; ancho = window.top.innerWidth; } catch (e) {}
-        document.documentElement.classList.toggle('portal-menu', emb && ancho > 760);
-      }
-      aplicar(); window.addEventListener('resize', aplicar);
+      var root = document.documentElement, emb = false;
+      try { emb = window.self !== window.top; } catch (e) {}
+      if (emb) root.classList.add('embedded');
+      window.__jrPortalMenu = false;
+      window.__jrAplicar = function () {
+        var ancho = 0; try { ancho = window.top.innerWidth; } catch (e) {}
+        root.classList.toggle('portal-menu', emb && window.__jrPortalMenu && ancho > 760);
+      };
+      window.addEventListener('resize', window.__jrAplicar);
     })();
   </script>
   <meta charset="UTF-8">

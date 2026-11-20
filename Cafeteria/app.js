@@ -729,7 +729,7 @@ function navigateTo(section) {
   if (section === 'usuarios') cargarUsuarios();
   if (section === 'registro') recalcularTarifasEnVivo();
 
-  if (window.innerWidth <= 992) {
+  if (window.innerWidth <= 992 || document.documentElement.classList.contains('embedded')) {
     document.getElementById('sidebar').classList.remove('open');
     const ov = document.getElementById('sidebar-overlay');
     if (ov) ov.classList.remove('show');
@@ -742,6 +742,11 @@ function navigateTo(section) {
 // El portal (menú desplegable) pide cambiar de sección
 window.addEventListener('message', (ev) => {
   const d = ev.data;
+  if (d && d.type === 'jr-menu' && d.app === 'cafeteria' && ev.source === window.parent) {
+    window.__jrPortalMenu = d.mode === 'portal';
+    if (window.__jrAplicar) window.__jrAplicar();
+    return;
+  }
   if (!d || d.type !== 'jr-goto' || d.app !== 'cafeteria') return;
   if (ev.source !== window.parent || !state.user) return;
   if (typeof d.section === 'string' && document.getElementById('section-' + d.section)) navigateTo(d.section);
