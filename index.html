@@ -22,6 +22,17 @@ header img{width:32px}header b{font-size:16px}header small{color:var(--mut);disp
 nav{background:var(--card);border-right:1px solid var(--line);padding:12px 8px;overflow:auto}
 nav h6{margin:14px 10px 4px;font-size:11px;letter-spacing:.06em;color:var(--mut);text-transform:uppercase}
 nav a{display:block;padding:9px 12px;border-radius:8px;cursor:pointer}nav a:hover{background:var(--bg)}nav a.on{background:color-mix(in srgb,var(--pri) 16%,transparent);color:var(--pri);font-weight:700}
+/* Submenú desplegable de aplicaciones (mismo estilo/colores del portal) */
+nav a.has-sub{display:flex;align-items:center;gap:6px}
+nav a.has-sub .chev{margin-left:auto;width:16px;height:16px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2.2;transition:transform .2s}
+nav .grp.open>a.has-sub .chev{transform:rotate(90deg)}
+nav .grp.open>a.has-sub.on{background:transparent}
+nav .sm{display:none;margin:2px 0 8px 20px;padding-left:8px;border-left:2px solid var(--line)}
+nav .grp.open .sm{display:block}
+nav .sm h6{margin:10px 6px 4px;font-size:10px}
+nav .sm a{display:flex;align-items:center;gap:9px;padding:7px 10px;margin:1px 0;font-size:13px}
+nav .sm a svg{width:16px;height:16px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2}
+@media(max-width:760px){nav .sm,nav a.has-sub .chev{display:none!important}}
 main{overflow:auto;padding:24px;position:relative}main iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
 h1{margin:0 0 4px}.sub{color:var(--mut);margin:0 0 18px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
@@ -133,15 +144,63 @@ function show(){
   const u=ses.user;$('#h-name').textContent=u.nombre;$('#h-user').textContent=u.usuario;$('#h-rol').textContent=u.rol==='admin'?'Administrador':'Usuario';
   const adm=u.rol==='admin';
   $('#nav').innerHTML=`<h6>Mi espacio</h6><a data-v="home">🏢 Oficina</a><h6>Mis aplicaciones</h6>`+
-    (myApps().map(a=>`<a data-v="${a.id}">${a.icono} ${esc(a.nombre)}</a>`).join('')||'<a style="color:var(--mut);cursor:default">Sin aplicaciones asignadas</a>')+
+    (myApps().map(a=>a.id==='cafeteria'?cafGroup(a):`<a data-v="${a.id}">${a.icono} ${esc(a.nombre)}</a>`).join('')||'<a style="color:var(--mut);cursor:default">Sin aplicaciones asignadas</a>')+
     (adm?`<h6>Administración</h6><a data-v="users">👥 Usuarios y accesos</a>`:'')+`<h6>Cuenta</h6><a data-v="perfil">🔑 Mi cuenta</a>`;
-  $('#nav').onclick=e=>{const v=e.target.closest('a')?.dataset.v;v&&go(v)};
+  $('#nav').onclick=e=>{
+    const s=e.target.closest('a[data-s]');if(s){goCaf(s.dataset.s);return}
+    const v=e.target.closest('a')?.dataset.v;if(!v)return;
+    if(v==='cafeteria'&&cur==='cafeteria'){cafOpen=!cafOpen;syncCaf();return}
+    go(v)};
   go(location.hash.slice(1)||'home');
 }
+/* ============ Submenú desplegable: Cafetería Regional Quindío ============ */
+const I=(d)=>`<svg viewBox="0 0 24 24">${d}</svg>`;
+const CAF_MENU=[
+ {t:'Operación'},
+ {s:'dashboard',n:'Dashboard General',i:I('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>')},
+ {s:'registro',n:'Registrar Cafetería',i:I('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>')},
+ {s:'consultas',n:'Consultar Registros',i:I('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>')},
+ {s:'sedes',n:'Sedes y Regionales',todas:1,i:I('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>')},
+ {s:'auxiliares',n:'Auxiliares de Cafetería',i:I('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>')},
+ {t:'Administración',adm:1},
+ {s:'coordinadores',n:'Gestión Coordinadores',adm:1,i:I('<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>')},
+ {s:'tarifas',n:'Tarifas y Valores',adm:1,i:I('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>')},
+ {s:'reportes',n:'Reportes Consolidados',i:I('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>')},
+ {s:'auditoria',n:'Auditoría y Trazabilidad',adm:1,i:I('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="3"/>')}
+];
+let cafOpen=false,cafSec='dashboard',cafPend=null;
+const cafRol=()=>ses.user.rol==='admin'?'ADMINISTRADOR':String((ses.user.accesos||{}).cafeteria||'').toUpperCase();
+function cafGroup(a){
+  const r=cafRol();
+  const items=CAF_MENU.filter(m=>(!m.adm||r==='ADMINISTRADOR')&&(!m.todas||r!=='SEDE'));
+  return `<div class="grp" id="g-caf"><a class="has-sub" data-v="${a.id}">${a.icono} <span>${esc(a.nombre)}</span><svg class="chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></a><div class="sm">`+
+    items.map(m=>m.t?`<h6>${m.t}</h6>`:`<a data-s="${m.s}">${m.i}<span>${m.n}</span></a>`).join('')+`</div></div>`;
+}
+function syncCaf(){
+  const g=$('#g-caf');if(!g)return;
+  g.classList.toggle('open',cafOpen);
+  g.querySelectorAll('.sm a').forEach(a=>a.classList.toggle('on',cur==='cafeteria'&&a.dataset.s===cafSec));
+}
+function cafSend(sec){const f=$('#main iframe');f&&f.contentWindow&&f.contentWindow.postMessage({type:'jr-goto',app:'cafeteria',section:sec},'*')}
+function goCaf(sec){
+  if(cur!=='cafeteria'){cafPend=sec;cafSec=sec;go('cafeteria');return}
+  cafSec=sec;syncCaf();cafSend(sec);
+}
+window.addEventListener('message',e=>{
+  const d=e.data,f=$('#main iframe');
+  if(!d||d.type!=='jr-nav'||d.app!=='cafeteria'||!f||e.source!==f.contentWindow)return;
+  f.contentWindow.postMessage({type:'jr-menu',app:'cafeteria',mode:'portal'},'*');
+  if(cafPend&&cafPend!==d.section){const p=cafPend;cafPend=null;cafSec=p;cafSend(p)}
+  else{cafPend=null;cafSec=d.section}
+  syncCaf();
+});
+
 function go(v){
   if(v==='users'&&ses.user.rol!=='admin')v='home';
   if(APPS.some(a=>a.id===v)&&!(ses.user.accesos&&ses.user.accesos[v]))v='home';
-  cur=v;location.hash=v;document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
+  if(v==='cafeteria'&&cur!=='cafeteria'&&!cafPend)cafSec='dashboard';
+  cur=v;location.hash=v;document.querySelectorAll('#nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
+  cafOpen=(v==='cafeteria');syncCaf();
   const m=$('#main'),app=APPS.find(a=>a.id===v);
   if(app){m.style.padding=0;m.innerHTML=`<iframe src="${encodeURI(app.url)}" title="${esc(app.nombre)}"></iframe>`;return}
   m.style.padding='';({home,users,perfil}[v]||home)();
