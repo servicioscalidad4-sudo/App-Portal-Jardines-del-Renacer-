@@ -94,6 +94,50 @@ function saveClientRegistros(regs) {
 }
 
 // ============================================================================
+// SESIÓN DEL PORTAL: la identidad y el rol del portal mandan SIEMPRE
+// (misma origin => mismo localStorage). Evita que quede un usuario viejo guardado.
+// ============================================================================
+function sincronizarConPortal() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem('jr_portal_session') || 'null'); } catch (e) {}
+  if (!p || !p.user || !(p.exp > Date.now())) return false;
+
+  const u = p.user;
+  const rol = u.rol === 'admin'
+    ? 'ADMINISTRADOR'
+    : String((u.accesos || {}).cafeteria || 'SEDE').toUpperCase();
+  const sedeNombre = u.sede || (rol === 'SEDE' ? '' : 'Armenia');
+
+  state.user = {
+    id: u.id,
+    usuario: u.usuario,
+    nombre_completo: u.nombre,
+    correo: u.correo || '',
+    rol,
+    regional_id: 1,
+    sede_nombre: sedeNombre,
+    sede_id: sedeIdPorNombre(sedeNombre) || 1,
+    cargo: u.rol === 'admin' ? 'Administrador del portal' : ''
+  };
+  state.token = 'portal-' + p.token;
+  localStorage.setItem('jr_cafeteria_user', JSON.stringify(state.user));
+  localStorage.setItem('jr_cafeteria_token', state.token);
+  return true;
+}
+
+// Colores de las gráficas según el tema del portal (claro / oscuro)
+function coloresTema() {
+  const oscuro = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return {
+    oscuro,
+    primario: oscuro ? '#7c82ee' : '#3b3fa0',
+    acento: oscuro ? '#a9aef8' : '#7c82ee',
+    texto: oscuro ? '#e8ebf7' : '#1c2340',
+    rejilla: oscuro ? '#2e3555' : '#dde2ee'
+  };
+}
+
+// ============================================================================
 // MOTOR DE CÁLCULO CLIENTE (HORAS DIURNAS, NOCTURNAS Y PRECIO)
 // ============================================================================
 function calcularHorasYTurnoClient(hInStr, hOutStr) {
@@ -137,7 +181,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const fechaInput = document.getElementById('reg-form-fecha');
   if (fechaInput) fechaInput.value = today;
 
-  if (window.PORTAL && state.user) state.user.sede_id = sedeIdPorNombre(state.user.sede_nombre) || state.user.sede_id || 1;
+  sincronizarConPortal(); // el rol del portal manda siempre
+
   if (state.token && state.user) {
     await inicializarApp();
   } else {
@@ -559,15 +604,17 @@ async function handleRegister(e) {
 }
 
 function handleLogout() {
+  // Cerrar sesión = cerrar la sesión del portal y volver a su pantalla de ingreso
   if (window.PORTAL) { PORTAL.logout(); return; }
-  state.token = null;
-  state.user = null;
+  localStorage.removeItem('jr_portal_session');
   localStorage.removeItem('jr_cafeteria_token');
   localStorage.removeItem('jr_cafeteria_user');
   localStorage.removeItem('jr_sheets_token');
+  state.token = null;
+  state.user = null;
   state.sheetsToken = null;
-  mostrarVistaAuth();
-  showToast('Sesión cerrada correctamente', 'warning');
+  const home = new URL('../index.html', window.location.href).href;
+  (window.top || window).location.replace(home);
 }
 
 function mostrarVistaAuth() {
@@ -632,6 +679,9 @@ function aplicarRestriccionSede() {
     el.disabled = true;
   });
 }
+
+// ============================================================================
+// NAVEGACIÓN
 // ============================================================================
 function navigateTo(section) {
   const soloAdmin = ['coordinadores', 'tarifas', 'auditoria', 'usuarios'];
@@ -644,6 +694,12 @@ function navigateTo(section) {
 
   const targetSection = document.getElementById(`section-${section}`);
   if (targetSection) targetSection.style.display = 'block';
+
+  // Marca el ítem activo del menú
+  document.querySelectorAll('.nav-item').forEach(item => {
+    const oc = item.getAttribute('onclick') || '';
+    if (oc.includes(`navigateTo('${section}')`)) item.classList.add('active');
+  });
 
   const titles = {
     dashboard: { title: 'Dashboard General', subtitle: 'Métricas e indicadores en tiempo real de gastos de cafetería' },
@@ -805,6 +861,7 @@ function renderGraficoMensual(datos) {
   const canvas = document.getElementById('chart-mensual');
   if (!canvas || typeof Chart === 'undefined') return;
 
+  const c = coloresTema();
   const labels = datos.map(d => d.mes_anio);
   const valores = datos.map(d => d.total_gasto);
 
@@ -818,15 +875,19 @@ function renderGraficoMensual(datos) {
       datasets: [{
         label: 'Gasto Total ($ COP)',
         data: valores,
-        backgroundColor: '#1a0e2a',
-        hoverBackgroundColor: '#c8a951',
+        backgroundColor: c.primario,
+        hoverBackgroundColor: c.acento,
         borderRadius: 4
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } }
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: c.texto }, grid: { color: c.rejilla } },
+        y: { ticks: { color: c.texto }, grid: { color: c.rejilla } }
+      }
     }
   });
 }
@@ -835,6 +896,7 @@ function renderGraficoSedes(datos) {
   const canvas = document.getElementById('chart-sedes');
   if (!canvas || typeof Chart === 'undefined') return;
 
+  const c = coloresTema();
   const labels = datos.slice(0, 7).map(d => d.sede);
   const valores = datos.slice(0, 7).map(d => d.total_gasto);
 
@@ -847,13 +909,14 @@ function renderGraficoSedes(datos) {
       labels: labels,
       datasets: [{
         data: valores.length ? valores : [1],
-        backgroundColor: ['#1a0e2a', '#c8a951', '#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
+        backgroundColor: [c.primario, c.acento, '#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'],
+        borderColor: c.oscuro ? '#1d2238' : '#ffffff'
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } }
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 }, color: c.texto } } }
     }
   });
 }
