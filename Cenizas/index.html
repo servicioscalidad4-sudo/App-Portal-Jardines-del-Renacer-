@@ -54,7 +54,11 @@ const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PH
   const $ = id => document.getElementById(id);
   const ok = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(CENIZAS_URL);
 
+  /* Avisa al portal (si está embebido) que ya hay algo que mostrar: la app lista o un mensaje de error */
+  function avisarPortal(){ try { if(window.parent !== window) window.parent.postMessage({ type: 'jr-listo', app: 'cenizas' }, '*'); } catch(e){} }
+
   function error(titulo, texto, reintentar){
+    avisarPortal();
     $('cover').classList.remove('off', 'hide');
     $('cover').classList.add('err'); $('spin').classList.add('hide');
     $('t').textContent = titulo; $('m').textContent = texto;
@@ -83,6 +87,7 @@ const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PH
   function mostrarApp(){
     if(listo) return;
     listo = true;
+    avisarPortal();
     $('cover').classList.add('off');
     setTimeout(() => $('cover').classList.add('hide'), 400);
   }
