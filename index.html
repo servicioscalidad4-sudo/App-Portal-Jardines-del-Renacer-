@@ -81,6 +81,33 @@ th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vert
 #npanel .nf{padding:10px 14px;text-align:center;border-top:1px solid var(--line);font-size:13px}#npanel .nf a{color:var(--pri);font-weight:700;cursor:pointer}
 #npanel .ne{padding:26px 14px;text-align:center;color:var(--mut)}
 @media(max-width:760px){#npanel{position:fixed;left:8px;right:8px;top:60px;width:auto;max-width:none}}
+
+/* ===== Aplicaciones: marcos persistentes + pantalla de carga ===== */
+#appsHost{grid-column:2;grid-row:2;position:relative;visibility:hidden;pointer-events:none;min-height:0}
+#appsHost.on{visibility:visible;pointer-events:auto}
+.pane{position:absolute;inset:0;background:var(--bg)}
+.pane.off{visibility:hidden;pointer-events:none}
+.pane iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
+.ldr{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--bg);text-align:center;padding:24px;transition:opacity .3s,visibility .3s}
+.pane.done .ldr{opacity:0;visibility:hidden;pointer-events:none}
+.ldr img{width:72px;height:72px;border-radius:18px;background:#fff;padding:5px;box-shadow:0 6px 18px rgba(74,0,255,.18)}
+.ldr h3{margin:0;font-size:18px}.ldr .lm{margin:0;color:var(--mut);max-width:420px;min-height:20px}
+.spn{width:38px;height:38px;border:4px solid var(--line);border-top-color:#4a00ff;border-radius:50%;animation:spn .8s linear infinite}
+@keyframes spn{to{transform:rotate(360deg)}}
+.lbar{width:220px;max-width:70vw;height:4px;border-radius:99px;background:var(--line);overflow:hidden}
+.lbar i{display:block;width:40%;height:100%;border-radius:99px;background:#4a00ff;animation:lbar 1.3s ease-in-out infinite}
+@keyframes lbar{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+.ldr .la{display:none;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px}
+.pane.slow .ldr .la,.pane.err .ldr .la{display:flex}
+.ldr .la .rt{display:none}.pane.err .ldr .la .rt{display:inline-block}.pane.err .ldr .la a{display:inline-block}
+.ldr .la a{text-decoration:none;display:none}.pane.slow .ldr .la a{display:inline-block}
+.pane.err .ldr .spn,.pane.err .ldr .lbar{display:none}.pane.err .ldr h3{color:var(--bad)}
+.bsp{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid #ffffff66;border-top-color:#fff;border-radius:50%;animation:spn .7s linear infinite}
+.bsp.dk{border-color:var(--line);border-top-color:#4a00ff}
+.btn.busy{opacity:.85;cursor:progress}
+.ldl{display:flex;align-items:center;gap:8px;color:var(--mut);padding:18px 0}
+@media(max-width:760px){#appsHost{grid-column:1;grid-row:3}}
+@media(prefers-reduced-motion:reduce){.spn,.bsp{animation-duration:2.4s}.lbar i{animation-duration:3s}}
 </style></head><body>
 
 <!-- Si algo falla al cargar, se muestra el motivo en pantalla en vez de dejarla en blanco -->
@@ -107,7 +134,7 @@ window.addEventListener('error',function(e){
 <header><img src="logo-jr.png" alt=""><div><b>Portal Jardines del Renacer</b><small>Tu oficina de trabajo</small></div><span class="sp"></span>
 <div id="bell-wrap" class="hide"><button id="bell" type="button" title="Notificaciones" aria-label="Notificaciones" onclick="notifToggle(event)"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bd hide" id="bell-n">0</span></button><div id="npanel" class="hide"></div></div>
 <div style="text-align:right"><b id="h-name"></b><small id="h-user"></small></div><span class="tag" id="h-rol"></span><button class="btn o s" onclick="logout()">Cerrar sesión</button></header>
-<nav id="nav"></nav><main id="main"></main></div>
+<nav id="nav"></nav><main id="main"></main><div id="appsHost" aria-live="polite"></div></div>
 <div id="modal" class="hide"></div><div id="toast" class="hide"></div>
 
 <script>
@@ -121,7 +148,7 @@ const PORTAL_CONFIG = {
 const APPS = [
   {id:'cafeteria',  nombre:'Cafetería Regional Quindío', icono:'☕', url:'Cafeteria/index.html',  desc:'Registro, liquidación y control de gastos de cafetería por sede.', roles:['ADMINISTRADOR','COORDINADOR','SEDE']},
   {id:'ss_diarios', nombre:'Control diario de Ss',       icono:'📊', url:'SS-Diarios/index.html', desc:'Análisis y tabla de control de servicios diarios.',               roles:['EDITOR','LECTOR']},
-  {id:'cenizas', nombre:'Control de Entrega de Cenizas', icono:'🕊️', url:'Cenizas/index.html', desc:'Registro y entrega de cenizas por sede, con estados y exportación.', roles:['ADMINISTRADOR','OPERADOR','LECTOR']}
+  {id:'cenizas', nombre:'Control de Entrega de Cenizas', icono:'🕊️', url:'Cenizas/index.html', espera:true, desc:'Registro y entrega de cenizas por sede, con estados y exportación.', roles:['ADMINISTRADOR','OPERADOR','LECTOR']}
 ];
 const SEDES=['Armenia','Calarcá','Circasia','Córdoba','Génova','La Tebaida','Montenegro','Pijao','Quimbaya','Barcelona'];
 
@@ -135,9 +162,16 @@ const lu=()=>JSON.parse(localStorage.getItem(LK)||'[]'), su=l=>localStorage.setI
 const pub=({salt,hash,...u})=>u;
 const allAccess=()=>Object.fromEntries(APPS.map(a=>[a.id,a.roles[0]]));
 async function remote(p){
-  const r=await fetch(PORTAL_CONFIG.GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(p)});
-  if(!r.ok)throw new Error('El servidor respondió con estado '+r.status);
-  const j=await r.json();
+  const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),30000);let r,j;
+  try{
+    r=await fetch(PORTAL_CONFIG.GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(p),signal:ac.signal});
+    if(!r.ok)throw new Error('El servidor respondió con estado '+r.status);
+    j=await r.json();
+  }catch(e){
+    if(e.name==='AbortError')throw new Error('El servidor tardó demasiado en responder. Intenta de nuevo.');
+    if(e instanceof TypeError||/failed to fetch|networkerror|load failed/i.test(e.message))throw new Error('No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.');
+    throw e;
+  }finally{clearTimeout(tm)}
   if(j.error){
     /* El servidor ya no reconoce el token (vencido o borrado del caché de Apps Script):
        se cierra la sesión local y se vuelve al login, en vez de dejar la pantalla con un error. */
@@ -183,10 +217,19 @@ async function boot(){
   try{ses=JSON.parse(localStorage.getItem(SK))}catch(e){ses=null}
   if(ses&&ses.user&&ses.exp>Date.now())return show();
   localStorage.removeItem(SK);ses=null;
-  try{(await api('status')).needsSetup?$('#v-setup').classList.remove('hide'):$('#v-login').classList.remove('hide')}
-  catch(e){$('#v-login').classList.remove('hide');$('#e-login').textContent='No hay conexión con el servidor: '+e.message}
+  /* El login se muestra al instante; la consulta al servidor corre en segundo plano
+     (además "despierta" Apps Script mientras la persona escribe sus datos). */
+  $('#v-login').classList.remove('hide');
+  try{
+    if((await api('status')).needsSetup&&!ses&&!$('#v-login').classList.contains('hide')&&!$('#f-login').usuario.value){$('#v-login').classList.add('hide');$('#v-setup').classList.remove('hide')}
+  }catch(e){/* si no hay conexión, el propio intento de ingreso mostrará un mensaje claro */}
 }
-const form=(id,err,fn)=>$(id).addEventListener('submit',async e=>{e.preventDefault();$(err).textContent='';$(err).classList.remove('ok');try{await fn(Object.fromEntries(new FormData(e.target)))}catch(x){$(err).textContent=x.message}});
+const BT={'#f-login':'Ingresando…','#f-reg':'Enviando solicitud…','#f-setup':'Creando administrador…'};
+const form=(id,err,fn)=>$(id).addEventListener('submit',async e=>{e.preventDefault();$(err).textContent='';$(err).classList.remove('ok');
+  const b=e.target.querySelector('button:not([type=button])'),h0=b&&b.innerHTML;
+  if(b){if(b.disabled)return;b.disabled=true;b.classList.add('busy');b.innerHTML='<span class="bsp"></span>'+(BT[id]||'Guardando…')}
+  try{await fn(Object.fromEntries(new FormData(e.target)))}catch(x){$(err).textContent=x.message}
+  finally{if(b){b.disabled=false;b.classList.remove('busy');b.innerHTML=h0}}});
 form('#f-setup','#e-setup',async d=>start(await api('setup',d)));
 function goReg(){['#v-login','#v-setup'].forEach(x=>$(x).classList.add('hide'));$('#e-reg').textContent='';$('#v-reg').classList.remove('hide')}
 function goLogin(msg){$('#v-reg').classList.add('hide');$('#v-login').classList.remove('hide');const e=$('#e-login');e.textContent=msg||'';e.classList.toggle('ok',!!msg)}
@@ -209,6 +252,7 @@ function show(){
     if(v==='cafeteria'&&cur==='cafeteria'){cafOpen=!cafOpen;syncCaf();return}
     go(v)};
   go(location.hash.slice(1)||'home');
+  precargar();
 }
 /* ============ Submenú desplegable: Cafetería Regional Quindío ============ */
 const I=(d)=>`<svg viewBox="0 0 24 24">${d}</svg>`;
@@ -238,13 +282,14 @@ function syncCaf(){
   g.classList.toggle('open',cafOpen);
   g.querySelectorAll('.sm a').forEach(a=>a.classList.toggle('on',cur==='cafeteria'&&a.dataset.s===cafSec));
 }
-function cafSend(sec){const f=$('#main iframe');f&&f.contentWindow&&f.contentWindow.postMessage({type:'jr-goto',app:'cafeteria',section:sec},'*')}
+const cafFrame=()=>FR.cafeteria&&FR.cafeteria.frame;
+function cafSend(sec){const f=cafFrame();f&&f.contentWindow&&f.contentWindow.postMessage({type:'jr-goto',app:'cafeteria',section:sec},'*')}
 function goCaf(sec){
   if(cur!=='cafeteria'){cafPend=sec;cafSec=sec;go('cafeteria');return}
   cafSec=sec;syncCaf();cafSend(sec);
 }
 window.addEventListener('message',e=>{
-  const d=e.data,f=$('#main iframe');
+  const d=e.data,f=cafFrame();
   if(!d||d.type!=='jr-nav'||d.app!=='cafeteria'||!f||e.source!==f.contentWindow)return;
   f.contentWindow.postMessage({type:'jr-menu',app:'cafeteria',mode:'portal'},'*');
   if(cafPend&&cafPend!==d.section){const p=cafPend;cafPend=null;cafSec=p;cafSend(p)}
@@ -255,12 +300,82 @@ window.addEventListener('message',e=>{
 function go(v){
   if(v==='users'&&ses.user.rol!=='admin')v='home';
   if(APPS.some(a=>a.id===v)&&!(ses.user.accesos&&ses.user.accesos[v]))v='home';
-  if(v==='cafeteria'&&cur!=='cafeteria'&&!cafPend)cafSec='dashboard';
+  if(v==='cafeteria'&&cur!=='cafeteria'&&!cafPend&&!(FR.cafeteria&&FR.cafeteria.ready))cafSec='dashboard';
   cur=v;location.hash=v;document.querySelectorAll('#nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
   cafOpen=(v==='cafeteria');syncCaf();
   const m=$('#main'),app=APPS.find(a=>a.id===v);
-  if(app){m.style.padding=0;m.innerHTML=`<iframe src="${encodeURI(app.url)}" title="${esc(app.nombre)}"></iframe>`;return}
-  m.style.padding='';({home,users,perfil}[v]||home)();
+  if(app){m.classList.add('hide');showApp(app);return}
+  hideApps();m.classList.remove('hide');m.style.padding='';({home,users,perfil}[v]||home)();
+}
+/* ============ Aplicaciones: marcos persistentes + pantalla de carga ============
+   Cada aplicación se carga UNA sola vez y se conserva en memoria: al cambiar de oficina solo se
+   muestra u oculta (instantáneo, sin recargar). Mientras abre, se ve una pantalla de carga con
+   mensajes de avance; si tarda o falla, ofrece reintentar. Las demás aplicaciones del usuario se
+   precargan en segundo plano, una a la vez, para que ya estén listas cuando entre. */
+const FR={};
+const APP_MSG=[[0,'Conectando…'],[4000,'Preparando tu espacio de trabajo…'],[10000,'Sincronizando la información…'],[20000,'Está tardando más de lo normal. Puedes seguir esperando o abrirla en una pestaña nueva.']];
+const APP_LIMITE=45000;
+let preTimer=null;
+function appFrame(app){
+  const box=document.createElement('div');box.className='pane off';
+  box.innerHTML=`<iframe title="${esc(app.nombre)}" allow="clipboard-read; clipboard-write; fullscreen; camera; geolocation"></iframe>
+  <div class="ldr" role="status"><img src="logo-jr.png" alt=""><div class="spn"></div><div class="lbar"><i></i></div><h3></h3><p class="lm"></p>
+  <div class="la"><a class="btn o s" target="_blank" rel="noopener">Abrir en una pestaña nueva</a><button type="button" class="btn s rt">Reintentar</button></div></div>`;
+  const x={app,box,frame:box.querySelector('iframe'),ready:false,t:[],n:0};
+  x.frame.addEventListener('load',()=>{
+    if(!x.frame.getAttribute('src')||x.ready)return;
+    /* Apps que avisan cuando terminan de iniciar (Cenizas): se espera su aviso, con respaldo de 40 s */
+    if(app.espera){x.t.push(setTimeout(()=>appListo(x),40000));return}
+    appListo(x);
+  });
+  box.querySelector('.rt').onclick=()=>appCargar(x);
+  box.querySelector('a').href=encodeURI(app.url);
+  FR[app.id]=x;$('#appsHost').appendChild(box);appCargar(x);
+  return x;
+}
+function appCargar(x){
+  x.t.forEach(clearTimeout);x.ready=false;
+  x.box.classList.remove('done','err','slow');
+  const lm=x.box.querySelector('.lm');
+  x.box.querySelector('h3').textContent='Abriendo '+x.app.nombre;lm.textContent=APP_MSG[0][1];
+  x.t=APP_MSG.slice(1).map(([ms,txt])=>setTimeout(()=>{if(x.ready)return;lm.textContent=txt;if(ms>=20000)x.box.classList.add('slow')},ms));
+  x.t.push(setTimeout(()=>{if(!x.ready)appError(x)},APP_LIMITE));
+  x.frame.src=encodeURI(x.app.url)+(x.n++?'?r='+Date.now():'');
+}
+function appListo(x){
+  if(x.ready)return;x.ready=true;x.t.forEach(clearTimeout);x.t=[];
+  x.box.classList.remove('err','slow');x.box.classList.add('done');
+}
+function appError(x){
+  x.t.forEach(clearTimeout);x.t=[];x.box.classList.remove('slow');x.box.classList.add('err');
+  x.box.querySelector('h3').textContent='No se pudo abrir '+x.app.nombre;
+  x.box.querySelector('.lm').textContent='La aplicación no respondió a tiempo. Revisa tu conexión e inténtalo de nuevo.';
+}
+/* Una app puede avisar que ya está lista (o mostró su propio mensaje) con {type:'jr-listo'} */
+window.addEventListener('message',e=>{
+  const d=e.data;if(!d||d.type!=='jr-listo')return;
+  const x=Object.values(FR).find(o=>o.frame.contentWindow===e.source);if(x)appListo(x);
+});
+function showApp(app){
+  const host=$('#appsHost');host.classList.add('on');
+  const x=FR[app.id]||appFrame(app);
+  Object.values(FR).forEach(o=>o.box.classList.toggle('off',o!==x));
+  /* Cafetería ya cargada: si se pidió una sección concreta, se envía directo */
+  if(app.id==='cafeteria'&&x.ready&&cafPend){const p=cafPend;cafPend=null;cafSec=p;cafSend(p);syncCaf()}
+  precargar();
+}
+function hideApps(){
+  const h=$('#appsHost');if(h)h.classList.remove('on');
+  Object.values(FR).forEach(o=>o.box.classList.add('off'));
+  precargar();
+}
+function precargar(){
+  clearTimeout(preTimer);
+  if(!ses||(navigator.connection&&navigator.connection.saveData))return;
+  const sig=myApps().find(a=>!FR[a.id]);if(!sig)return;
+  /* una a la vez: espera a que termine la que está cargando */
+  const cargando=Object.values(FR).some(o=>!o.ready&&!o.box.classList.contains('err'));
+  preTimer=setTimeout(()=>{if(!ses)return;if(cargando){precargar();return}if(!FR[sig.id])appFrame(sig);precargar()},cargando?1500:1200);
 }
 function home(){
   const l=myApps();$('#main').innerHTML=`<h1>Oficina</h1><p class="sub">Hola, ${esc(ses.user.nombre)}. Estas son las aplicaciones a las que tienes acceso.</p>`+
@@ -274,7 +389,7 @@ function perfil(){
 }
 let USERS=[];
 async function users(){
-  const m=$('#main');m.innerHTML='<p>Cargando…</p>';
+  const m=$('#main');m.innerHTML='<div class="ldl"><span class="bsp dk"></span>Cargando usuarios…</div>';
   try{USERS=(await api('listUsers')).users}catch(e){if(!ses)return;m.innerHTML=`<p class="err">${esc(e.message)}</p>`;return}
   m.innerHTML=`<div style="display:flex;align-items:center"><div style="flex:1"><h1>Usuarios y accesos</h1><p class="sub">Crea usuarios y decide a qué aplicaciones entra cada uno.</p></div><button class="btn" onclick="editUser()">+ Nuevo usuario</button></div>
   <div style="overflow:auto"><table><tr><th>Usuario</th><th>Aplicaciones asignadas</th><th>Estado</th><th></th></tr>${USERS.map(u=>`<tr><td><b>${esc(u.nombre)}</b><br><small style="color:var(--mut)">${esc(u.usuario)}${u.rol==='admin'?' · Administrador':''}</small></td>
