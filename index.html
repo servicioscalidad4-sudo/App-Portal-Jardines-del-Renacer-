@@ -208,7 +208,8 @@ const PORTAL_CONFIG = {
 const APPS = [
   {id:'cafeteria',  nombre:'Cafetería Regional Quindío', icono:'☕', url:'Cafeteria/index.html',  desc:'Registro, liquidación y control de gastos de cafetería por sede.', roles:['ADMINISTRADOR','COORDINADOR','SEDE']},
   {id:'ss_diarios', nombre:'Control diario de Ss',       icono:'📊', url:'SS-Diarios/index.html', desc:'Análisis y tabla de control de servicios diarios.',               roles:['EDITOR','LECTOR']},
-  {id:'cenizas', nombre:'Control de Entrega de Cenizas', icono:'🕊️', url:'Cenizas/index.html', espera:true, desc:'Registro y entrega de cenizas por sede, con estados y exportación.', roles:['ADMINISTRADOR','OPERADOR','LECTOR']}
+  {id:'cenizas', nombre:'Control de Entrega de Cenizas', icono:'🕊️', url:'Cenizas/index.html', espera:true, desc:'Registro y entrega de cenizas por sede, con estados y exportación.', roles:['ADMINISTRADOR','OPERADOR','LECTOR']},
+  {id:'calidad', nombre:'Análisis de Calidad J.R', icono:'✅', url:'Calidad/index.html', espera:true, desc:'Dashboard de calidad: novedades, correcciones, autorizaciones e historial.', roles:['ANALISTA','COORDINADOR','ADMINISTRADOR','LECTOR']}
 ];
 const SEDES=['Armenia','Calarcá','Circasia','Córdoba','Génova','La Tebaida','Montenegro','Pijao','Quimbaya','Barcelona'];
 
@@ -304,12 +305,14 @@ function show(){
   const u=ses.user;$('#h-name').textContent=u.nombre;$('#h-user').textContent=u.usuario;$('#h-rol').textContent=u.rol==='admin'?'Administrador':'Usuario';
   const adm=u.rol==='admin';notifInit(adm);
   $('#nav').innerHTML=`<h6>Mi espacio</h6><a data-v="home">🏢 Oficina</a><a data-v="chat">💬 Chat <span class="nb hide" id="nb-chat"></span></a><h6>Mis aplicaciones</h6>`+
-    (myApps().map(a=>a.id==='cafeteria'?cafGroup(a):`<a data-v="${a.id}">${a.icono} ${esc(a.nombre)}</a>`).join('')||'<a style="color:var(--mut);cursor:default">Sin aplicaciones asignadas</a>')+
+    (myApps().map(a=>a.id==='cafeteria'?cafGroup(a):a.id==='calidad'?calGroup(a):`<a data-v="${a.id}">${a.icono} ${esc(a.nombre)}</a>`).join('')||'<a style="color:var(--mut);cursor:default">Sin aplicaciones asignadas</a>')+
     (adm?`<h6>Administración</h6><a data-v="users">👥 Usuarios y accesos</a>`:'')+`<h6>Cuenta</h6><a data-v="perfil">🔑 Mi cuenta</a>`;
   $('#nav').onclick=e=>{
+    const c=e.target.closest('a[data-cs]');if(c){goCal(c.dataset.cs);return}
     const s=e.target.closest('a[data-s]');if(s){goCaf(s.dataset.s);return}
     const v=e.target.closest('a')?.dataset.v;if(!v)return;
     if(v==='cafeteria'&&cur==='cafeteria'){cafOpen=!cafOpen;syncCaf();return}
+    if(v==='calidad'&&cur==='calidad'){calOpen=!calOpen;syncCal();return}
     go(v)};
   go(location.hash.slice(1)||'home');
   precargar();
@@ -358,12 +361,54 @@ window.addEventListener('message',e=>{
   syncCaf();
 });
 
+/* ============ Submenú desplegable: Análisis de Calidad J.R (mismo patrón que Cafetería) ============ */
+const CAL_MENU=[
+ {t:'Operación'},
+ {s:'total',n:'General (Unión)',i:I('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>')},
+ {s:'zaider',n:'Dashboard Zaider',i:I('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')},
+ {s:'jocelyn',n:'Dashboard Jocelyn',i:I('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')},
+ {s:'autorizadores',n:'Autorizadores',i:I('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>')},
+ {t:'Herramientas'},
+ {s:'historial',n:'Mi historial',i:I('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>')},
+ {s:'excel',n:'Exportar Excel',i:I('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>')},
+ {s:'especial',n:'Exportar selección especial',an:1,i:I('<polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9"/>')},
+ {s:'actualizar',n:'Actualizar datos',i:I('<polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>')}
+];
+let calOpen=false,calSec='total',calPend=null;
+const calRol=()=>ses.user.rol==='admin'?'ADMINISTRADOR':String((ses.user.accesos||{}).calidad||'').toUpperCase();
+function calGroup(a){
+  const r=calRol();
+  const items=CAL_MENU.filter(m=>!m.an||r==='ANALISTA'||r==='ADMINISTRADOR');
+  return `<div class="grp" id="g-cal"><a class="has-sub" data-v="${a.id}">${a.icono} <span>${esc(a.nombre)}</span><svg class="chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></a><div class="sm">`+
+    items.map(m=>m.t?`<h6>${m.t}</h6>`:`<a data-cs="${m.s}">${m.i}<span>${m.n}</span></a>`).join('')+`</div></div>`;
+}
+function syncCal(){
+  const g=$('#g-cal');if(!g)return;
+  g.classList.toggle('open',calOpen);
+  g.querySelectorAll('.sm a').forEach(a=>a.classList.toggle('on',cur==='calidad'&&a.dataset.cs===calSec&&['total','zaider','jocelyn'].includes(a.dataset.cs)));
+}
+const calFrame=()=>FR.calidad&&FR.calidad.frame;
+function calSend(sec){const f=calFrame();f&&f.contentWindow&&f.contentWindow.postMessage({type:'jr-goto',app:'calidad',section:sec},'*')}
+function goCal(sec){
+  if(cur!=='calidad'){calPend=sec;if(['total','zaider','jocelyn'].includes(sec))calSec=sec;go('calidad');return}
+  if(['total','zaider','jocelyn'].includes(sec))calSec=sec;
+  syncCal();calSend(sec);
+}
+window.addEventListener('message',e=>{
+  const d=e.data,f=calFrame();
+  if(!d||d.type!=='jr-nav'||d.app!=='calidad'||!f||e.source!==f.contentWindow)return;
+  f.contentWindow.postMessage({type:'jr-menu',app:'calidad',mode:'portal'},'*');
+  if(calPend){const p=calPend;calPend=null;calSend(p)}
+  if(d.section)calSec=d.section;
+  syncCal();
+});
+
 function go(v){
   if(v==='users'&&ses.user.rol!=='admin')v='home';
   if(APPS.some(a=>a.id===v)&&!(ses.user.accesos&&ses.user.accesos[v]))v='home';
   if(v==='cafeteria'&&cur!=='cafeteria'&&!cafPend&&!(FR.cafeteria&&FR.cafeteria.ready))cafSec='dashboard';
   cur=v;CH.on=(v==='chat');location.hash=v;document.querySelectorAll('#nav a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-  cafOpen=(v==='cafeteria');syncCaf();
+  cafOpen=(v==='cafeteria');syncCaf();calOpen=(v==='calidad');syncCal();
   const m=$('#main'),app=APPS.find(a=>a.id===v);
   if(app){m.classList.add('hide');showApp(app);return}
   hideApps();m.classList.remove('hide');m.style.padding='';m.style.overflow='';({home,users,perfil,chat:chatView}[v]||home)();
@@ -423,6 +468,7 @@ function showApp(app){
   Object.values(FR).forEach(o=>o.box.classList.toggle('off',o!==x));
   /* Cafetería ya cargada: si se pidió una sección concreta, se envía directo */
   if(app.id==='cafeteria'&&x.ready&&cafPend){const p=cafPend;cafPend=null;cafSec=p;cafSend(p);syncCaf()}
+  if(app.id==='calidad'&&x.ready&&calPend){const p=calPend;calPend=null;calSend(p);syncCal()}
   precargar();
 }
 function hideApps(){
