@@ -49,7 +49,7 @@ html,body{height:100dvh}
 <script>
 /* ===== CONFIGURACIÓN ===== */
 /* URL /exec de la app de Calidad (Apps Script). */
-const CALIDAD_URL = 'https://script.google.com/macros/s/AKfycbwtNMRVmwnhvysUK7N08eJNQgLsdsWJb-S6mT4PzK62KaD2tSg6YrmaqT2G7Ab2Gqn4/exec';
+const CALIDAD_URL = 'https://script.google.com/a/macros/jardinesdelrenacer.co/s/AKfycbwtNMRVmwnhvysUK7N08eJNQgLsdsWJb-S6mT4PzK62KaD2tSg6YrmaqT2G7Ab2Gqn4/exec';
 /* URL /exec del backend del portal (la misma de PORTAL_CONFIG.GAS_URL en index.html) */
 const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PHXFG6qdxZCxnWalG5eg_GtscpntJ4w2U11tNEOca-QwTHnyg_YvKYw/exec';
 /* ========================= */
@@ -61,7 +61,7 @@ const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PH
   /* ?top=1 -> la página se abrió SOLA (sin el marco del portal): va directo a la aplicación, a pantalla completa.
      Así Google no bloquea las cookies de terceros (que es lo que falla en el móvil dentro de un iframe). */
   const MODO_TOP = /[?&]top=1/.test(location.search) && window.top === window;
-  const ok = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(CALIDAD_URL);
+  const ok = /^https:\/\/script\.google\.com\/(?:a\/)?macros\/(?:[\w.-]+\/)?s\/[\w-]+\/exec/.test(CALIDAD_URL);
 
   /* Avisa al portal (si está embebido) que ya hay algo que mostrar: la app lista o un mensaje de error */
   function avisarPortal(){ try { if(window.parent !== window) window.parent.postMessage({ type: 'jr-listo', app: 'calidad' }, '*'); } catch(e){} }
