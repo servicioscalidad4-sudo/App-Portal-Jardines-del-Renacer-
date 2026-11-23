@@ -44,7 +44,7 @@ body{font:14px system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:v
 
 <script>
 /* ===== CONFIGURACIÓN ===== */
-/* URL /exec de la app de Calidad (Apps Script). PEGA AQUÍ la URL de tu implementación. */
+/* URL /exec de la app de Calidad (Apps Script). */
 const CALIDAD_URL = 'https://script.google.com/macros/s/AKfycbwtNMRVmwnhvysUK7N08eJNQgLsdsWJb-S6mT4PzK62KaD2tSg6YrmaqT2G7Ab2Gqn4/exec';
 /* URL /exec del backend del portal (la misma de PORTAL_CONFIG.GAS_URL en index.html) */
 const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PHXFG6qdxZCxnWalG5eg_GtscpntJ4w2U11tNEOca-QwTHnyg_YvKYw/exec';
@@ -71,7 +71,7 @@ const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PH
     return;
   }
 
-  /* Sesión del portal (portal-guard.js ya validó que existe y que tiene acceso a "cenizas") */
+  /* Sesión del portal (portal-guard.js ya validó que existe y que tiene acceso) */
   let ses = null;
   try { ses = JSON.parse(localStorage.getItem('jr_portal_session')); } catch(e){}
   if(!ses || !ses.token){
@@ -82,8 +82,7 @@ const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PH
   const f = $('frame');
   let listo = false, URL_APP = '', BASE = '';
 
-  /* La pantalla de carga se quita cuando la app AVISA que ya está lista
-     (antes se quitaba al cargar el marco de Google y se veía un área vacía). */
+  /* La pantalla de carga se quita cuando la app AVISA que ya está lista */
   function mostrarApp(){
     if(listo) return;
     listo = true;
@@ -92,14 +91,39 @@ const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PH
     setTimeout(() => $('cover').classList.add('hide'), 400);
   }
 
+  /* ═══ NAVEGACIÓN SIN RECARGA ═══
+     Envía el mensaje a la app por todos los iframes anidados
+     (wrapper > marco de Google > sandbox de la app). */
+  function difundir(w, msg, nivel){
+    try { w.postMessage(msg, '*'); } catch(e){}
+    if(nivel >= 3) return;
+    var n = 0; try { n = w.length; } catch(e){}
+    for(var i = 0; i < n; i++){ try { difundir(w[i], msg, nivel + 1); } catch(e){} }
+  }
+
+  var _gotoTimer = null, _gotoAck = false;
+
+  function irASeccionApp(sec){
+    if(!BASE || !f.contentWindow) return;
+    _gotoAck = false;
+    difundir(f.contentWindow, { type: 'jr-goto', app: 'calidad', section: sec }, 0);
+    clearTimeout(_gotoTimer);
+    _gotoTimer = setTimeout(function(){
+      /* Respaldo: si la app no confirmó, se usa el método anterior (recarga) */
+      if(!_gotoAck) f.src = BASE + '#s=' + encodeURIComponent(sec) + '&t=' + Date.now();
+    }, 2500);
+  }
+
   window.addEventListener('message', e => {
     if(e.data && e.data.tipo === 'calidad-listo') mostrarApp();
+    /* La app confirma que recibió el cambio de sección (no hace falta recargar) */
+    if(e.data && e.data.tipo === 'calidad-goto-ok') _gotoAck = true;
     /* La app avisa en qué sección está -> el portal resalta su menú */
     if(e.data && e.data.tipo === 'calidad-nav' && window.parent !== window)
       window.parent.postMessage({ type: 'jr-nav', app: 'calidad', section: e.data.section }, '*');
-    /* El portal pide cambiar de sección -> se pasa a la app por el # (sin recargar) */
+    /* El portal pide cambiar de sección -> se pasa a la app SIN recargar */
     if(e.data && e.data.type === 'jr-goto' && e.data.app === 'calidad' && BASE)
-      f.src = BASE + '#s=' + encodeURIComponent(e.data.section) + '&t=' + Date.now();
+      irASeccionApp(e.data.section);
     if(e.data && e.data.type === 'jr-menu' && e.source === window.parent) { /* la app ya recibe pm=1 en la URL */ }
   });
 
@@ -115,12 +139,11 @@ const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PH
     return b.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   }
 
-  /* Calienta la app de Cenizas mientras el portal prepara el ticket (se hacen a la vez,
-     así no se suma el tiempo de arranque de los dos servidores de Apps Script). */
+  /* Calienta la app mientras el portal prepara el ticket */
   try { fetch(CALIDAD_URL, { mode: 'no-cors', cache: 'no-store' }).catch(() => {}); } catch(e){}
 
-  /* 1) El portal emite un ticket firmado y de corta vida (NO se manda la sesión).
-     2) Cenizas lo valida con el portal en su servidor y entra con su usuario. */
+  /* 1) El portal emite un ticket firmado y de corta vida.
+     2) La app lo valida con el portal en su servidor y entra con su usuario. */
   fetch(PORTAL_GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
