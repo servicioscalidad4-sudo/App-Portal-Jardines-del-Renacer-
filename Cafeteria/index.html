@@ -632,9 +632,10 @@
                   <tr>
                     <th>ID</th>
                     <th>Nombres y Apellidos</th>
-                    <th>Documento</th>
+                   <th>Documento</th>
                     <th>Teléfono</th>
                     <th>Estado</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="tabla-auxiliares-body">
@@ -978,10 +979,10 @@
   <div class="modal-overlay" id="modal-nuevo-auxiliar">
     <div class="modal-card" style="max-width: 480px;">
       <div class="modal-header">
-        <h3>Registrar Nuevo Auxiliar de Cafetería</h3>
+        <h3 id="modal-aux-titulo">Registrar Nuevo Auxiliar de Cafetería</h3>
         <button class="btn btn-sm btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.4);" onclick="cerrarModal('modal-nuevo-auxiliar')">✕</button>
       </div>
-      <form onsubmit="guardarNuevoAuxiliar(event)">
+      <form onsubmit="guardarNuevoAuxiliar(event)">         <input type="hidden" id="modal-aux-id">
         <div class="modal-body">
           <div class="form-group" style="margin-bottom: 12px;">
             <label>Nombres y Apellidos *</label>
@@ -1008,10 +1009,10 @@
   <div class="modal-overlay" id="modal-nuevo-coordinador">
     <div class="modal-card" style="max-width: 480px;">
       <div class="modal-header">
-        <h3>Registrar Coordinador Oficial</h3>
+        <h3 id="modal-coord-titulo">Registrar Coordinador Oficial</h3>
         <button class="btn btn-sm btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.4);" onclick="cerrarModal('modal-nuevo-coordinador')">✕</button>
       </div>
-      <form onsubmit="guardarNuevoCoordinador(event)">
+      <form onsubmit="guardarNuevoCoordinador(event)">         <input type="hidden" id="modal-coord-id">
         <div class="modal-body">
           <div class="form-group" style="margin-bottom: 12px;">
             <label>Nombres y Apellidos *</label>
