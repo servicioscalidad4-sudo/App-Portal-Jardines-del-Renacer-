@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<!-- Guardia del portal: sin sesión o sin acceso a "calidad" devuelve al portal.
+     Ruta: Cenizas/ está en la raíz del repo, igual que portal-guard.js -->
+<script src="../portal-guard.js" data-app="calidad"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Análisis de Calidad J.R · Jardines del Renacer</title>
+<link rel="icon" href="../logo-jr.png">
+<style>
+/* Mismos colores corporativos del portal */
+:root{--bg:#e9edf5;--card:#fff;--ink:#1c2340;--mut:#6b7392;--pri:#3b3fa0;--acc:#4a00ff;--line:#dde2ee;--bad:#c0392b}
+@media(prefers-color-scheme:dark){:root{--bg:#141829;--card:#1d2238;--ink:#e8ebf7;--mut:#98a0c0;--pri:#7c82ee;--line:#2e3555}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+#frame{position:fixed;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
+.cover{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--bg);text-align:center;padding:24px;transition:opacity .35s}
+.cover.off{opacity:0;pointer-events:none}
+.cover img{width:72px;height:72px;border-radius:18px;background:#fff;padding:5px;box-shadow:0 6px 18px rgba(74,0,255,.18)}
+.spin{width:38px;height:38px;border:4px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:g .8s linear infinite}
+@keyframes g{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
+.cover h2{margin:0;font-size:18px}.cover p{margin:0;color:var(--mut);max-width:420px}
+.btn{display:inline-block;background:var(--acc);color:#fff;border-radius:10px;padding:10px 18px;font-weight:600;text-decoration:none;border:0;cursor:pointer;font:inherit;font-weight:600}
+.btn:hover{background:#3b00cc}.btn:focus-visible{outline:3px solid var(--pri);outline-offset:2px}
+.err h2{color:var(--bad)}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="cover" id="cover">
+  <img src="../logo-jr.png" alt="Jardines del Renacer">
+  <div class="spin" id="spin"></div>
+  <h2 id="t">Abriendo Análisis de Calidad J.R</h2>
+  <p id="m">Conectando con el sistema…</p>
+  <a class="btn hide" id="alt" target="_blank" rel="noopener">Abrir en una pestaña nueva</a>
+  <button class="btn hide" id="retry" type="button">Reintentar</button>
+</div>
+
+<iframe id="frame" title="Análisis de Calidad J.R" allow="accelerometer; autoplay; camera; clipboard-read; clipboard-write; encrypted-media; fullscreen; geolocation; gyroscope; magnetometer; microphone; midi; payment; screen-wake-lock; usb"></iframe>
+
+<script>
+/* ===== CONFIGURACIÓN ===== */
+/* URL /exec de la app de Calidad (Apps Script). PEGA AQUÍ la URL de tu implementación. */
+const CALIDAD_URL = 'PEGAR_URL_EXEC_DE_CALIDAD';
+/* URL /exec del backend del portal (la misma de PORTAL_CONFIG.GAS_URL en index.html) */
+const PORTAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqHHvFyCbS-s1PHXFG6qdxZCxnWalG5eg_GtscpntJ4w2U11tNEOca-QwTHnyg_YvKYw/exec';
+/* ========================= */
+
+(function(){
+  const $ = id => document.getElementById(id);
+  const ok = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(CALIDAD_URL);
+
+  /* Avisa al portal (si está embebido) que ya hay algo que mostrar: la app lista o un mensaje de error */
+  function avisarPortal(){ try { if(window.parent !== window) window.parent.postMessage({ type: 'jr-listo', app: 'calidad' }, '*'); } catch(e){} }
+
+  function error(titulo, texto, reintentar){
+    avisarPortal();
+    $('cover').classList.remove('off', 'hide');
+    $('cover').classList.add('err'); $('spin').classList.add('hide');
+    $('t').textContent = titulo; $('m').textContent = texto;
+    if(reintentar){ $('retry').classList.remove('hide'); $('retry').onclick = () => location.reload(); }
+  }
+
+  if(!ok){
+    error('Falta configurar la dirección de Calidad',
+          'Abre Calidad/index.html y pega la URL /exec de la implementación de Apps Script en CALIDAD_URL.');
+    return;
+  }
+
+  /* Sesión del portal (portal-guard.js ya validó que existe y que tiene acceso a "cenizas") */
+  let ses = null;
+  try { ses = JSON.parse(localStorage.getItem('jr_portal_session')); } catch(e){}
+  if(!ses || !ses.token){
+    error('Sesión del portal no encontrada', 'Vuelve al portal e inicia sesión de nuevo.', true);
+    return;
+  }
+
+  const f = $('frame');
+  let listo = false, URL_APP = '', BASE = '';
+
+  /* La pantalla de carga se quita cuando la app AVISA que ya está lista
+     (antes se quitaba al cargar el marco de Google y se veía un área vacía). */
+  function mostrarApp(){
+    if(listo) return;
+    listo = true;
+    avisarPortal();
+    $('cover').classList.add('off');
+    setTimeout(() => $('cover').classList.add('hide'), 400);
+  }
+
+  window.addEventListener('message', e => {
+    if(e.data && e.data.tipo === 'calidad-listo') mostrarApp();
+    /* La app avisa en qué sección está -> el portal resalta su menú */
+    if(e.data && e.data.tipo === 'calidad-nav' && window.parent !== window)
+      window.parent.postMessage({ type: 'jr-nav', app: 'calidad', section: e.data.section }, '*');
+    /* El portal pide cambiar de sección -> se pasa a la app por el # (sin recargar) */
+    if(e.data && e.data.type === 'jr-goto' && e.data.app === 'calidad' && BASE)
+      f.src = BASE + '#s=' + encodeURIComponent(e.data.section) + '&t=' + Date.now();
+    if(e.data && e.data.type === 'jr-menu' && e.source === window.parent) { /* la app ya recibe pm=1 en la URL */ }
+  });
+
+  f.addEventListener('load', () => {
+    if(!f.getAttribute('src') || listo) return;
+    $('m').textContent = 'Iniciando tu sesión…';
+    /* Respaldo: si la app no avisa, se muestra igual a los 30 s */
+    setTimeout(mostrarApp, 30000);
+  });
+
+  function b64url(o){
+    const b = btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+    return b.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+
+  /* Calienta la app de Cenizas mientras el portal prepara el ticket (se hacen a la vez,
+     así no se suma el tiempo de arranque de los dos servidores de Apps Script). */
+  try { fetch(CALIDAD_URL, { mode: 'no-cors', cache: 'no-store' }).catch(() => {}); } catch(e){}
+
+  /* 1) El portal emite un ticket firmado y de corta vida (NO se manda la sesión).
+     2) Cenizas lo valida con el portal en su servidor y entra con su usuario. */
+  fetch(PORTAL_GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'ticket', token: ses.token, app: 'calidad' })
+  })
+  .then(r => r.json())
+  .then(j => {
+    if(j.error) throw new Error(j.error);
+    if(!j.ticket) throw new Error('Respuesta inválida del portal');
+    $('m').textContent = 'Cargando la aplicación…';
+    var ancho = 0; try { ancho = window.top.innerWidth; } catch (e) {}
+    BASE = CALIDAD_URL + '?p=' + b64url({ tk: j.ticket }) + (ancho > 760 ? '&pm=1' : '');
+    URL_APP = BASE; f.src = BASE;
+
+    /* Si tarda demasiado, ofrece abrirla en una pestaña aparte */
+    setTimeout(() => {
+      if(listo) return;
+      $('m').textContent = 'Está tardando más de lo normal. Puedes esperar o abrirla en una pestaña nueva.';
+      $('alt').href = URL_APP; $('alt').classList.remove('hide');
+    }, 20000);
+  })
+  .catch(e => {
+    error('No se pudo abrir Calidad',
+          String(e.message || e) === 'Sesión expirada'
+            ? 'Tu sesión del portal expiró. Vuelve a iniciar sesión.'
+            : 'No hubo respuesta del portal (' + (e.message || e) + '). Intenta de nuevo.', true);
+  });
+})();
+</script>
+</body>
+</html>
