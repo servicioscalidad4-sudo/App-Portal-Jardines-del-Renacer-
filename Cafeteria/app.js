@@ -22,7 +22,8 @@ let state = {
   registrosTotalPages: 1,
   chartMensualInstance: null,
   chartSedesInstance: null,
-  registroSeleccionado: null
+  registroSeleccionado: null,
+  catalogosRemoto: false
 };
 
 // ============================================================================
@@ -91,6 +92,83 @@ function getClientRegistros() {
 
 function saveClientRegistros(regs) {
   localStorage.setItem('jr_client_registros', JSON.stringify(regs));
+}
+
+// ============================================================================
+// UTILIDADES
+// ============================================================================
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ============================================================================
+// CATÁLOGOS COMPARTIDOS (COORDINADORES Y AUXILIARES): Google Sheets + caché local
+// - La fuente de verdad es Google Sheets (hojas Coordinadores y Auxiliares).
+// - El navegador guarda una copia (caché) para seguir funcionando si no hay conexión.
+// ============================================================================
+let catalogosPromise = null;
+
+function getCatalogo(tipo) {
+  try {
+    const g = JSON.parse(localStorage.getItem('jr_client_' + tipo) || 'null');
+    if (Array.isArray(g)) return g;
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(tipo === 'coordinadores' ? DEFAULT_COORDINADORES : DEFAULT_AUXILIARES));
+}
+
+function saveCatalogo(tipo, lista) {
+  localStorage.setItem('jr_client_' + tipo, JSON.stringify(lista));
+}
+
+// Descarga ambos catálogos desde Google Sheets (una sola llamada, compartida entre quienes la pidan a la vez)
+function cargarCatalogoRemoto(force) {
+  if (catalogosPromise && !force) return catalogosPromise;
+  catalogosPromise = (async () => {
+    try {
+      const r = await llamarSheets({ action: 'listCatalogos' });
+      if (r && r.success && Array.isArray(r.coordinadores) && Array.isArray(r.auxiliares)) {
+        saveCatalogo('coordinadores', r.coordinadores);
+        saveCatalogo('auxiliares', r.auxiliares);
+        state.catalogosRemoto = true;
+        return true;
+      }
+      console.warn('Catálogos remotos no disponibles:', r && r.error);
+    } catch (e) {
+      console.warn('Sin conexión con Google Sheets para catálogos, se usa la copia local', e);
+    }
+    state.catalogosRemoto = false;
+    return false;
+  })();
+  return catalogosPromise;
+}
+
+// Vuelve a leer de Sheets y repuebla estado y listas desplegables
+async function refrescarCatalogos() {
+  await cargarCatalogoRemoto(true);
+  state.coordinadores = getCatalogo('coordinadores');
+  state.auxiliares = getCatalogo('auxiliares');
+  poblarSelectCoordinadores();
+  poblarSelectAuxiliares();
+}
+
+// Llamada de escritura al catálogo, con mensajes de error claros
+async function llamarCatalogo(payload) {
+  const base = Object.assign({ usuario: state.user ? state.user.usuario : '' }, payload);
+  try {
+    const r = await llamarSheets(base);
+    if (r && r.success) return r;
+    if (r && r.error === 'Acción no válida') {
+      return { success: false, error: 'Falta actualizar Code.gs en Apps Script (pegar el código nuevo e implementar una nueva versión).' };
+    }
+    return { success: false, error: (r && r.error) || 'No se pudo guardar el cambio.' };
+  } catch (e) {
+    return { success: false, error: 'Sin conexión con Google Sheets. Intenta de nuevo.' };
+  }
+}
+
+function nombreCoordinadorPorId(id) {
+  const c = (state.coordinadores || []).find(x => x.id == id);
+  return c ? ((c.nombres || '') + ' ' + (c.apellidos || '')).trim() : '';
 }
 
 // ============================================================================
@@ -341,10 +419,14 @@ function procesarSolicitudCliente(endpoint, method, body) {
     return loginUsuarioCreado(body.usuario, pass);
   }
 
-  // 3. Catálogos
+  // 3. Catálogos (coordinadores y auxiliares vienen de Google Sheets, con caché local)
   if (endpoint.startsWith('/api/sedes')) return { sedes: DEFAULT_SEDES };
-  if (endpoint.startsWith('/api/coordinadores')) return { coordinadores: DEFAULT_COORDINADORES };
-  if (endpoint.startsWith('/api/auxiliares')) return { auxiliares: DEFAULT_AUXILIARES };
+  if (endpoint.startsWith('/api/coordinadores')) {
+    return cargarCatalogoRemoto().then(() => ({ coordinadores: getCatalogo('coordinadores') }));
+  }
+  if (endpoint.startsWith('/api/auxiliares')) {
+    return cargarCatalogoRemoto().then(() => ({ auxiliares: getCatalogo('auxiliares') }));
+  }
   if (endpoint.startsWith('/api/tarifas')) return { tarifas: DEFAULT_TARIFAS };
 
   // 4. Cálculo instantáneo
@@ -422,7 +504,7 @@ function procesarSolicitudCliente(endpoint, method, body) {
       valor_a_pagar: vTotal,
       regional_nombre: 'Regional Quindío',
       sede_nombre: DEFAULT_SEDES.find(s => s.id == body.sede_id)?.nombre || 'Armenia',
-      coordinador_nombre: DEFAULT_COORDINADORES.find(c => c.id == body.coordinador_id)?.nombres || 'Coordinador',
+      coordinador_nombre: nombreCoordinadorPorId(body.coordinador_id) || 'Coordinador',
       usuario_creador: state.user ? state.user.usuario : '',
       estado: 'activo'
     };
@@ -456,7 +538,7 @@ function procesarSolicitudCliente(endpoint, method, body) {
     const actualizado = {
       ...regs[idx], ...body, ...calc, valor_a_pagar: vTotal,
       sede_nombre: DEFAULT_SEDES.find(s => s.id == body.sede_id)?.nombre || regs[idx].sede_nombre,
-      coordinador_nombre: DEFAULT_COORDINADORES.find(c => c.id == body.coordinador_id)?.nombres || regs[idx].coordinador_nombre
+      coordinador_nombre: nombreCoordinadorPorId(body.coordinador_id) || regs[idx].coordinador_nombre
     };
     regs[idx] = actualizado;
     saveClientRegistros(regs);
@@ -722,12 +804,21 @@ function navigateTo(section) {
   if (section === 'dashboard') loadDashboardStats();
   if (section === 'consultas') cargarRegistros(1);
   if (section === 'sedes') renderizarTablaSedes();
-  if (section === 'auxiliares') renderizarTablaAuxiliares();
-  if (section === 'coordinadores') renderizarTablaCoordinadores();
+  if (section === 'auxiliares') {
+    renderizarTablaAuxiliares();
+    refrescarCatalogos().then(() => { if (state.currentSection === 'auxiliares') renderizarTablaAuxiliares(); });
+  }
+  if (section === 'coordinadores') {
+    renderizarTablaCoordinadores();
+    refrescarCatalogos().then(() => { if (state.currentSection === 'coordinadores') renderizarTablaCoordinadores(); });
+  }
   if (section === 'tarifas') cargarTarifas();
   if (section === 'auditoria') cargarAuditoria();
   if (section === 'usuarios') cargarUsuarios();
-  if (section === 'registro') recalcularTarifasEnVivo();
+  if (section === 'registro') {
+    recalcularTarifasEnVivo();
+    refrescarCatalogos(); // trae auxiliares/coordinadores nuevos hechos desde otros equipos
+  }
 
   if (window.innerWidth <= 992 || document.documentElement.classList.contains('embedded')) {
     document.getElementById('sidebar').classList.remove('open');
@@ -800,16 +891,23 @@ async function cargarCoordinadores() {
   }
 }
 
+// Reasigna las opciones de un <select> conservando la selección actual si sigue existiendo
+function repoblarSelect(el, html) {
+  const previo = el.value;
+  el.innerHTML = html;
+  if (previo && Array.from(el.options).some(o => o.value === previo)) el.value = previo;
+}
+
 function poblarSelectCoordinadores() {
   const optionsHtml = state.coordinadores
-    .filter(c => c.activo === 1)
-    .map(c => `<option value="${c.id}">${c.nombres} ${c.apellidos || ''}</option>`).join('');
+    .filter(c => c.activo == 1)
+    .map(c => `<option value="${c.id}">${escHtml(((c.nombres || '') + ' ' + (c.apellidos || '')).trim())}</option>`).join('');
 
   const regCoord = document.getElementById('reg-form-coordinador');
-  if (regCoord) regCoord.innerHTML = optionsHtml;
+  if (regCoord) repoblarSelect(regCoord, optionsHtml);
 
   const filtroCoord = document.getElementById('filtro-coordinador');
-  if (filtroCoord) filtroCoord.innerHTML = '<option value="">Todos los Coordinadores</option>' + optionsHtml;
+  if (filtroCoord) repoblarSelect(filtroCoord, '<option value="">Todos los Coordinadores</option>' + optionsHtml);
 }
 
 async function cargarAuxiliares() {
@@ -822,9 +920,9 @@ async function cargarAuxiliares() {
 
 function poblarSelectAuxiliares() {
   const optionsHtml = state.auxiliares
-    .map(a => `<option value="${a.nombres}">${a.nombres}</option>`).join('');
+    .map(a => `<option value="${escHtml(a.nombres)}">${escHtml(a.nombres)}</option>`).join('');
   const regAux = document.getElementById('reg-form-auxiliar');
-  if (regAux) regAux.innerHTML = optionsHtml;
+  if (regAux) repoblarSelect(regAux, optionsHtml);
 }
 
 // ============================================================================
@@ -1025,12 +1123,27 @@ async function editarRegistro(id) {
   state.editandoId = r.id;
   document.getElementById('reg-form-fecha').value = r.fecha;
   document.getElementById('reg-form-sede').value = r.sede_id;
-  document.getElementById('reg-form-auxiliar').value = r.auxiliar_nombre;
+
+  // Si la auxiliar o el coordinador del registro ya fueron eliminados del catálogo,
+  // se añaden temporalmente para no cambiar el dato sin querer al corregir.
+  const selAux = document.getElementById('reg-form-auxiliar');
+  if (r.auxiliar_nombre && !Array.from(selAux.options).some(o => o.value === r.auxiliar_nombre)) {
+    selAux.insertAdjacentHTML('beforeend', `<option value="${escHtml(r.auxiliar_nombre)}">${escHtml(r.auxiliar_nombre)} (ya no está en el listado)</option>`);
+  }
+  selAux.value = r.auxiliar_nombre;
+
+  const selCoord = document.getElementById('reg-form-coordinador');
+  if (r.coordinador_id) {
+    if (!Array.from(selCoord.options).some(o => o.value == r.coordinador_id)) {
+      selCoord.insertAdjacentHTML('beforeend', `<option value="${escHtml(r.coordinador_id)}">${escHtml(r.coordinador_nombre || 'Coordinador')} (ya no está en el listado)</option>`);
+    }
+    selCoord.value = r.coordinador_id;
+  }
+
   document.getElementById('reg-form-prestacion').value = r.prestacion;
   document.getElementById('reg-form-fallecido').value = r.nombre_fallecido;
   document.getElementById('reg-form-hora-in').value = r.hora_ingreso;
   document.getElementById('reg-form-hora-out').value = r.hora_salida;
-  if (r.coordinador_id) document.getElementById('reg-form-coordinador').value = r.coordinador_id;
   document.getElementById('reg-form-obs').value = r.obs_admon || '';
   document.getElementById('btn-submit-registro').innerText = 'Guardar Cambios (' + r.consecutivo + ')';
   recalcularTarifasEnVivo();
@@ -1268,7 +1381,7 @@ function guardarNuevaTarifa(e) {
 }
 
 // ============================================================================
-// COORDINADORES Y AUXILIARES
+// SEDES
 // ============================================================================
 function renderizarTablaSedes() {
   const tbody = document.getElementById('tabla-sedes-body');
@@ -1286,56 +1399,173 @@ function renderizarTablaSedes() {
   }
 }
 
+// ============================================================================
+// COORDINADORES (solo Administrador) — crear, editar y eliminar en Google Sheets
+// ============================================================================
 function renderizarTablaCoordinadores() {
   const tbody = document.getElementById('tabla-coordinadores-body');
-  if (tbody && state.coordinadores) {
-    tbody.innerHTML = state.coordinadores.map(c => `
-      <tr>
-        <td>${c.id}</td>
-        <td><strong>${c.nombres} ${c.apellidos || ''}</strong></td>
-        <td>Regional Quindío</td>
-        <td>${c.celular || 'No registrado'}</td>
-        <td><span class="badge badge-activo">Activo</span></td>
-        <td>
-          <button class="btn btn-outline btn-sm" onclick="showToast('Coordinador oficial verificado', 'info')">
-            Activo
-          </button>
-        </td>
-      </tr>
-    `).join('');
+  if (!tbody || !state.coordinadores) return;
+
+  if (state.coordinadores.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px;">No hay coordinadores. Usa "+ Registrar Coordinador".</td></tr>';
+    return;
   }
+
+  tbody.innerHTML = state.coordinadores.map(c => `
+    <tr>
+      <td>${c.id}</td>
+      <td><strong>${escHtml(c.nombres)} ${escHtml(c.apellidos || '')}</strong></td>
+      <td>Regional Quindío</td>
+      <td>${escHtml(c.celular) || 'No registrado'}</td>
+      <td><span class="badge badge-activo">Activo</span></td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-outline btn-sm" onclick="editarCoordinador(${c.id})">✏️ Editar</button>
+        <button class="btn btn-outline btn-sm" onclick="eliminarCoordinador(${c.id})" style="color: var(--danger); border-color: #fca5a5;">🗑 Eliminar</button>
+      </td>
+    </tr>
+  `).join('');
 }
 
-function abrirModalNuevoCoordinador() { abrirModal('modal-nuevo-coordinador'); }
-function guardarNuevoCoordinador(e) {
+function abrirModalNuevoCoordinador() {
+  document.getElementById('modal-coord-id').value = '';
+  document.getElementById('modal-coord-titulo').innerText = 'Registrar Coordinador Oficial';
+  document.getElementById('modal-coord-nombre').value = '';
+  document.getElementById('modal-coord-celular').value = '';
+  abrirModal('modal-nuevo-coordinador');
+}
+
+function editarCoordinador(id) {
+  const c = state.coordinadores.find(x => x.id == id);
+  if (!c) return;
+  document.getElementById('modal-coord-id').value = c.id;
+  document.getElementById('modal-coord-titulo').innerText = 'Editar Coordinador Oficial';
+  document.getElementById('modal-coord-nombre').value = ((c.nombres || '') + ' ' + (c.apellidos || '')).trim();
+  document.getElementById('modal-coord-celular').value = c.celular || '';
+  abrirModal('modal-nuevo-coordinador');
+}
+
+async function guardarNuevoCoordinador(e) {
   e.preventDefault();
-  showToast('Coordinador registrado', 'success');
+  const btn = e.target.querySelector('button[type="submit"]');
+  const id = document.getElementById('modal-coord-id').value;
+  const nombre = document.getElementById('modal-coord-nombre').value.trim();
+  const celular = document.getElementById('modal-coord-celular').value.trim();
+  if (!nombre) { showToast('El nombre es obligatorio', 'warning'); return; }
+
+  const textoBtn = btn ? btn.innerText : '';
+  if (btn) { btn.disabled = true; btn.innerText = 'Guardando...'; }
+
+  const r = await llamarCatalogo({ action: 'saveCoordinador', id: id ? Number(id) : 0, nombre, celular });
+
+  if (btn) { btn.disabled = false; btn.innerText = textoBtn; }
+  if (!r.success) { showToast(r.error, 'danger'); return; }
+
+  await refrescarCatalogos();
+  renderizarTablaCoordinadores();
+  showToast(id ? 'Coordinador actualizado' : 'Coordinador registrado', 'success');
   cerrarModal('modal-nuevo-coordinador');
 }
 
-function renderizarTablaAuxiliares() {
-  const tbody = document.getElementById('tabla-auxiliares-body');
-  if (tbody && state.auxiliares) {
-    tbody.innerHTML = state.auxiliares.map(a => `
-      <tr>
-        <td>${a.id}</td>
-        <td><strong>${a.nombres}</strong></td>
-        <td>${a.documento || 'No registrado'}</td>
-        <td>${a.telefono || 'No registrado'}</td>
-        <td><span class="badge badge-activo">Activo</span></td>
-      </tr>
-    `).join('');
-  }
+async function eliminarCoordinador(id) {
+  const c = state.coordinadores.find(x => x.id == id);
+  if (!c) return;
+  if (!confirm('¿Eliminar al coordinador "' + ((c.nombres || '') + ' ' + (c.apellidos || '')).trim() + '"?\nLos registros ya guardados conservan su nombre.')) return;
+
+  const r = await llamarCatalogo({ action: 'deleteCoordinador', id: Number(id) });
+  if (!r.success) { showToast(r.error, 'danger'); return; }
+
+  await refrescarCatalogos();
+  renderizarTablaCoordinadores();
+  showToast('Coordinador eliminado', 'success');
 }
 
-function abrirModalNuevoAuxiliar() { abrirModal('modal-nuevo-auxiliar'); }
-function guardarNuevoAuxiliar(e) {
+// ============================================================================
+// AUXILIARES — crear (todos), editar y eliminar (Administrador y Coordinador)
+// ============================================================================
+function renderizarTablaAuxiliares() {
+  const tbody = document.getElementById('tabla-auxiliares-body');
+  if (!tbody || !state.auxiliares) return;
+
+  if (state.auxiliares.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px;">No hay auxiliares. Usa "+ Nuevo Auxiliar".</td></tr>';
+    return;
+  }
+
+  const puede = veTodasLasSedes();
+  tbody.innerHTML = state.auxiliares.map(a => `
+    <tr>
+      <td>${a.id}</td>
+      <td><strong>${escHtml(a.nombres)}</strong></td>
+      <td>${escHtml(a.documento) || 'No registrado'}</td>
+      <td>${escHtml(a.telefono) || 'No registrado'}</td>
+      <td><span class="badge badge-activo">Activo</span></td>
+      <td style="white-space:nowrap;">${puede ? `
+        <button class="btn btn-outline btn-sm" onclick="editarAuxiliar(${a.id})">✏️ Editar</button>
+        <button class="btn btn-outline btn-sm" onclick="eliminarAuxiliar(${a.id})" style="color: var(--danger); border-color: #fca5a5;">🗑 Eliminar</button>
+      ` : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalNuevoAuxiliar() {
+  document.getElementById('modal-aux-id').value = '';
+  document.getElementById('modal-aux-titulo').innerText = 'Registrar Nuevo Auxiliar de Cafetería';
+  document.getElementById('modal-aux-nombre').value = '';
+  document.getElementById('modal-aux-doc').value = '';
+  document.getElementById('modal-aux-tel').value = '';
+  abrirModal('modal-nuevo-auxiliar');
+}
+
+function editarAuxiliar(id) {
+  const a = state.auxiliares.find(x => x.id == id);
+  if (!a) return;
+  document.getElementById('modal-aux-id').value = a.id;
+  document.getElementById('modal-aux-titulo').innerText = 'Editar Auxiliar de Cafetería';
+  document.getElementById('modal-aux-nombre').value = a.nombres || '';
+  document.getElementById('modal-aux-doc').value = a.documento || '';
+  document.getElementById('modal-aux-tel').value = a.telefono || '';
+  abrirModal('modal-nuevo-auxiliar');
+}
+
+async function guardarNuevoAuxiliar(e) {
   e.preventDefault();
-  const nombre = document.getElementById('modal-aux-nombre').value;
-  state.auxiliares.push({ id: state.auxiliares.length + 1, nombres: nombre });
-  poblarSelectAuxiliares();
-  showToast('Auxiliar registrada exitosamente', 'success');
+  const btn = e.target.querySelector('button[type="submit"]');
+  const id = document.getElementById('modal-aux-id').value;
+  const nombre = document.getElementById('modal-aux-nombre').value.trim();
+  const documento = document.getElementById('modal-aux-doc').value.trim();
+  const telefono = document.getElementById('modal-aux-tel').value.trim();
+  if (!nombre) { showToast('El nombre es obligatorio', 'warning'); return; }
+
+  const textoBtn = btn ? btn.innerText : '';
+  if (btn) { btn.disabled = true; btn.innerText = 'Guardando...'; }
+
+  const r = await llamarCatalogo({ action: 'saveAuxiliar', id: id ? Number(id) : 0, nombre, documento, telefono });
+
+  if (btn) { btn.disabled = false; btn.innerText = textoBtn; }
+  if (!r.success) { showToast(r.error, 'danger'); return; }
+
+  await refrescarCatalogos();
+  renderizarTablaAuxiliares();
+  // Si se creó desde el formulario de registro, deja seleccionada la auxiliar nueva
+  if (!id) {
+    const sel = document.getElementById('reg-form-auxiliar');
+    if (sel && Array.from(sel.options).some(o => o.value === nombre)) sel.value = nombre;
+  }
+  showToast(id ? 'Auxiliar actualizada' : 'Auxiliar registrada exitosamente', 'success');
   cerrarModal('modal-nuevo-auxiliar');
+}
+
+async function eliminarAuxiliar(id) {
+  const a = state.auxiliares.find(x => x.id == id);
+  if (!a) return;
+  if (!confirm('¿Eliminar a la auxiliar "' + a.nombres + '"?\nLos registros ya guardados conservan su nombre.')) return;
+
+  const r = await llamarCatalogo({ action: 'deleteAuxiliar', id: Number(id) });
+  if (!r.success) { showToast(r.error, 'danger'); return; }
+
+  await refrescarCatalogos();
+  renderizarTablaAuxiliares();
+  showToast('Auxiliar eliminada', 'success');
 }
 
 // ============================================================================
