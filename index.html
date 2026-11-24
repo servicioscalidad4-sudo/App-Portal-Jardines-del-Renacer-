@@ -2,6 +2,10 @@
 <html lang="es"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Portal Jardines del Renacer</title><link rel="icon" href="logo-jr.png">
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#4a00ff">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Portal JR"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script src="pwa.js"></script>
 <style>
 :root{--bg:#e9edf5;--card:#fff;--ink:#1c2340;--mut:#6b7392;--pri:#3b3fa0;--line:#dde2ee;--ok:#1f9d6b;--bad:#c0392b}
 @media(prefers-color-scheme:dark){:root{--bg:#141829;--card:#1d2238;--ink:#e8ebf7;--mut:#98a0c0;--pri:#7c82ee;--line:#2e3555}}
@@ -276,7 +280,7 @@ async function remote(p){
   return j;
 }
 function sessionLost(){
-  localStorage.removeItem(SK);ses=null;
+  window.jrBadgeClear&&jrBadgeClear();localStorage.removeItem(SK);ses=null;
   ['#shell','#v-setup','#v-reg'].forEach(s=>$(s).classList.add('hide'));$('#modal').classList.add('hide');
   $('#v-login').classList.remove('hide');
   $('#e-login').classList.remove('ok');$('#e-login').textContent='Tu sesión expiró. Ingresa nuevamente para continuar.';
@@ -305,7 +309,7 @@ function start(r){
   const u=r.user; if(u.rol==='admin')u.accesos=allAccess();
   ses={token:r.token,user:u,exp:Date.now()+5*3600e3}; localStorage.setItem(SK,JSON.stringify(ses)); show();
 }
-function logout(){localStorage.removeItem(SK);ses=null;location.hash='';location.reload()}
+function logout(){window.jrBadgeClear&&jrBadgeClear();localStorage.removeItem(SK);ses=null;location.hash='';location.reload()}
 const myApps=()=>APPS.filter(a=>ses.user.accesos&&ses.user.accesos[a.id]);
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.remove('hide');setTimeout(()=>e.classList.add('hide'),2600)}
 async function boot(){
@@ -340,7 +344,7 @@ function show(){
   const adm=u.rol==='admin';notifInit(adm);
   $('#nav').innerHTML=`<h6>Mi espacio</h6><a data-v="home">🏢 Oficina</a><a data-v="chat">💬 Chat <span class="nb hide" id="nb-chat"></span></a><h6>Mis aplicaciones</h6>`+
     (myApps().map(a=>a.id==='cafeteria'?cafGroup(a):a.id==='calidad'?calGroup(a):`<a data-v="${a.id}">${a.icono} ${esc(a.nombre)}</a>`).join('')||'<a style="color:var(--mut);cursor:default">Sin aplicaciones asignadas</a>')+
-    (adm?`<h6>Administración</h6><a data-v="users">👥 Usuarios y accesos</a>`:'')+`<h6>Cuenta</h6><a data-v="perfil">🔑 Mi cuenta</a><a onclick="polOpen(event)">📄 Política de datos</a><a class="logout" onclick="logout()">⏻ Cerrar sesión</a>`;
+    (adm?`<h6>Administración</h6><a data-v="users">👥 Usuarios y accesos</a>`:'')+`<h6>Cuenta</h6><a data-v="perfil">🔑 Mi cuenta</a><a id="nav-inst" onclick="jrInstall()">📲 Instalar aplicación</a><a id="nav-noti" onclick="jrEnable()">🔔 Activar avisos</a><a onclick="polOpen(event)">📄 Política de datos</a><a class="logout" onclick="logout()">⏻ Cerrar sesión</a>`;
   $('#nav').onclick=e=>{
     const c=e.target.closest('a[data-cs]');if(c){goCal(c.dataset.cs);return}
     const s=e.target.closest('a[data-s]');if(s){goCaf(s.dataset.s);return}
@@ -348,9 +352,10 @@ function show(){
     if(v==='cafeteria'&&cur==='cafeteria'){cafOpen=!cafOpen;syncCaf();return}
     if(v==='calidad'&&cur==='calidad'){calOpen=!calOpen;syncCal();return}
     go(v)};
-  go(location.hash.slice(1)||'home');
+  (window.jrRoute?jrRoute:go)(location.hash.slice(1)||'home');
   precargar();
   chatStart();
+  window.jrPrompt&&jrPrompt();
 }
 /* ============ Submenú desplegable: Cafetería Regional Quindío ============ */
 const I=(d)=>`<svg viewBox="0 0 24 24">${d}</svg>`;
@@ -648,7 +653,7 @@ const notifSeen=()=>{try{return JSON.parse(localStorage.getItem(NK)||'[]')}catch
 const notifPend=l=>l.filter(u=>u.rol!=='admin'&&u.estado!=='activo'&&!Object.keys(u.accesos||{}).length);
 function notifBadge(){
   const seen=notifSeen(),n=NOTIFS.filter(u=>!seen.includes(u.id)).length,b=$('#bell-n');
-  b.textContent=n>9?'9+':n;b.classList.toggle('hide',!n);
+  b.textContent=n>9?'9+':n;b.classList.toggle('hide',!n);window.jrBadgeSet&&jrBadgeSet('bell',n);
 }
 async function notifRefresh(){
   if(!ses||ses.user.rol!=='admin')return;
@@ -659,9 +664,10 @@ async function notifRefresh(){
   localStorage.setItem(NK,JSON.stringify(notifSeen().filter(i=>ids.includes(i))));
   if(notifPrev){
     const nuevos=NOTIFS.filter(u=>!notifPrev.includes(u.id));
-    if(nuevos.length){notifSound('solicitud');toast('🔔 Nueva solicitud de acceso: '+nuevos[0].nombre+(nuevos.length>1?' y '+(nuevos.length-1)+' más':''));const b=$('#bell');b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring')}
+    if(nuevos.length){notifSound('solicitud');const tx=nuevos[0].nombre+(nuevos.length>1?' y '+(nuevos.length-1)+' más':'');window.jrNotify?jrNotify({title:'Nueva solicitud de acceso',body:tx+' pidió acceso al portal',tag:'jr-req',hash:'#users'}):toast('🔔 Nueva solicitud de acceso: '+tx);const b=$('#bell');b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring')}
   }
-  notifPrev=ids;notifBadge();
+  const primera=notifPrev===null;notifPrev=ids;notifBadge();
+  if(primera){const sv=notifSeen(),pend=NOTIFS.filter(u=>!sv.includes(u.id)).length;if(pend&&window.jrNotify)jrNotify({title:'Solicitudes de acceso pendientes',body:'Tienes '+pend+' solicitud'+(pend>1?'es':'')+' por revisar',tag:'jr-req',hash:'#users'})}
   if(!$('#npanel').classList.contains('hide'))notifRender();
 }
 function notifInit(adm){
@@ -731,7 +737,7 @@ function chIdx(){
 function chBadge(ix){
   ix=ix||chIdx();let n=0;Object.values(ix).forEach(c=>n+=c.un);const t=n>99?'99+':n;
   ['#nb-chat','#cbadge'].forEach(s=>{const e=$(s);if(e){e.textContent=t;e.classList.toggle('hide',!n)}});
-  document.title=(n?'('+t+') ':'')+CHT;
+  document.title=(n?'('+t+') ':'')+CHT;window.jrBadgeSet&&jrBadgeSet('chat',n);
 }
 function chRead(k,ix){
   const c=(ix||chIdx())[k];if(!c)return false;
@@ -760,6 +766,7 @@ function chatBoot(){
       if(!raw){const ix=chIdx();Object.keys(ix).forEach(k=>chRead(k,ix));chSave()} /* primera vez: lo existente cuenta como leído */
       CH.ready=true;CH.off=false;CH.net=true;
       chatPhotosLoad();chRefresh();
+      if(raw&&window.jrNotify){let n=0;Object.values(chIdx()).forEach(c=>n+=c.un);if(n)jrNotify({title:'💬 Mensajes sin leer',body:'Tienes '+n+' mensaje'+(n>1?'s':'')+' sin leer en el chat',tag:'jr-chat-unread',hash:'#chat'})}
       return true;
     }catch(e){
       if(!ses)return false;
@@ -784,7 +791,8 @@ async function chatPoll(silent){
     const out=inc.filter(m=>!(CH.on&&!document.hidden&&chKey(m)===CH.active));
     if(!silent&&out.length){
       const m=out[out.length-1],tx=String(m.texto||(m.adj?'📎 '+m.adj.n:'')).slice(0,60);
-      notifSound('chat');toast('💬 '+m.nombre+': '+tx);const b=$('#chatbtn');if(b){b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring')}
+      notifSound('chat');{const k=chKey(m),cn=k==='general'?'Todo el portal':k.startsWith('app:')?((APPS.find(a=>a.id===k.slice(4))||{}).nombre||'Canal'):'';
+        window.jrNotify?jrNotify({title:'💬 '+m.nombre+(cn?' · '+cn:''),body:tx,tag:'jr-chat-'+k,hash:'#chat~'+k}):toast('💬 '+m.nombre+': '+tx)}const b=$('#chatbtn');if(b){b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring')}
     }
     if(!silent)chRefresh();
   }finally{CH.busy=false}
