@@ -1296,12 +1296,10 @@ function lanzarWhatsApp() {
   const phone = document.getElementById('wa-input-phone').value.replace(/[^0-9]/g, '');
   const texto = document.getElementById('wa-preview-text').value;
 
-  if (!phone) {
-    showToast('Por favor ingrese un número de WhatsApp de destino', 'warning');
-    return;
-  }
-
-  const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(texto)}`;
+  // Número opcional: sin número, WhatsApp abre su selector de contactos/grupos
+  const url = phone
+    ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(texto)}`
+    : `https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`;
   window.open(url, '_blank');
   cerrarModal('modal-whatsapp');
   showToast('Abriendo WhatsApp con el reporte...', 'success');
