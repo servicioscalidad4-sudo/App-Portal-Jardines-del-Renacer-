@@ -542,6 +542,31 @@ function editUser(id){
     await api('saveUser',{user:d});$('#modal').classList.add('hide');toast('Usuario guardado');users()});
 }
 async function delUser(id){if(!confirm('¿Eliminar este usuario? Perderá todos sus accesos.'))return;try{await api('deleteUser',{id});toast('Usuario eliminado');users()}catch(e){toast(e.message)}}
+/* ============ Sonido de notificación ============
+   Tono generado con Web Audio (sin archivos). Los navegadores exigen una interacción previa
+   del usuario para reproducir audio, por eso se "desbloquea" con el primer clic/tecla/toque. */
+let SND=null;
+function sndCtx(){
+  try{if(!SND){const A=window.AudioContext||window.webkitAudioContext;if(A)SND=new A()}}catch(e){}
+  return SND;
+}
+function sndUnlock(){const c=sndCtx();if(c&&c.state==='suspended')c.resume().catch(()=>{})}
+['click','keydown','touchstart','pointerdown'].forEach(ev=>document.addEventListener(ev,sndUnlock,{passive:true}));
+function notifSound(tipo){
+  try{
+    const c=sndCtx();if(!c)return;
+    if(c.state==='suspended')c.resume().catch(()=>{});
+    const notas=tipo==='solicitud'?[784,988,1175]:[880,1175]; /* solicitud: 3 notas; chat: 2 notas */
+    const t0=c.currentTime+0.02;
+    notas.forEach((f,i)=>{
+      const o=c.createOscillator(),g=c.createGain(),t=t0+i*0.16;
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.25,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.28);
+      o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+0.3);
+    });
+  }catch(e){}
+}
+
 /* ============ Campana de notificaciones (solo administrador) ============
    Avisa de solicitudes de acceso nuevas: usuarios creados desde "Solicitar acceso"
    (quedan inactivos y sin aplicaciones hasta que el administrador los active).
@@ -563,7 +588,7 @@ async function notifRefresh(){
   localStorage.setItem(NK,JSON.stringify(notifSeen().filter(i=>ids.includes(i))));
   if(notifPrev){
     const nuevos=NOTIFS.filter(u=>!notifPrev.includes(u.id));
-    if(nuevos.length){toast('🔔 Nueva solicitud de acceso: '+nuevos[0].nombre+(nuevos.length>1?' y '+(nuevos.length-1)+' más':''));const b=$('#bell');b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring')}
+    if(nuevos.length){notifSound('solicitud');toast('🔔 Nueva solicitud de acceso: '+nuevos[0].nombre+(nuevos.length>1?' y '+(nuevos.length-1)+' más':''));const b=$('#bell');b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring')}
   }
   notifPrev=ids;notifBadge();
   if(!$('#npanel').classList.contains('hide'))notifRender();
@@ -688,7 +713,7 @@ async function chatPoll(silent){
     const out=inc.filter(m=>!(CH.on&&!document.hidden&&chKey(m)===CH.active));
     if(!silent&&out.length){
       const m=out[out.length-1],tx=String(m.texto||(m.adj?'📎 '+m.adj.n:'')).slice(0,60);
-      toast('💬 '+m.nombre+': '+tx);const b=$('#chatbtn');if(b){b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring')}
+      notifSound('chat');toast('💬 '+m.nombre+': '+tx);const b=$('#chatbtn');if(b){b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring')}
     }
     if(!silent)chRefresh();
   }finally{CH.busy=false}
