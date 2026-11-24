@@ -1192,6 +1192,9 @@ async function cargarRegistros(page = 1) {
   if (turno) rows = rows.filter(r => r.turno === turno);
   if (estado) rows = rows.filter(r => r.estado === estado);
 
+  // Guardamos las filas visibles para que el botón de WhatsApp las encuentre por id
+  window._registrosFilas = rows;
+
   const tbody = document.getElementById('tabla-registros-body');
   document.getElementById('total-registros-count').innerText = rows.length.toLocaleString();
   document.getElementById('paginacion-info').innerText = `Total registros: ${rows.length}`;
@@ -1214,7 +1217,7 @@ async function cargarRegistros(page = 1) {
       <td><span class="badge ${r.turno === 'Turno Diurno' ? 'badge-diurno' : (r.turno === 'Turno Nocturno' ? 'badge-nocturno' : 'badge-mixto')}">${r.turno}</span></td>
       <td style="font-weight: 700;">$ ${Math.round(r.valor_a_pagar).toLocaleString()}</td>
       <td style="white-space: nowrap;">
-        <button class="btn btn-whatsapp btn-sm" onclick='prepararWhatsAppDesdeFila(${JSON.stringify(r)})' title="Enviar reporte por WhatsApp">
+        <button class="btn btn-whatsapp btn-sm" onclick="prepararWhatsAppPorId(${r.id})" title="Enviar reporte por WhatsApp">
           💬 WA
         </button>
         ${r.estado === 'activo' && puedeGestionarRegistro(r) ? `
@@ -1240,7 +1243,7 @@ function limpiarFiltrosConsulta() {
 }
 
 // ============================================================================
-// INTEGRACIÓN CON WHATSAPP (FORMATO EXACTO SEGÚN DISEÑO.TXT)
+// INTEGRACIÓN CON WHATSAPP (mensaje con negrillas, emojis y separadores)
 // ============================================================================
 function obtenerSaludoSegunHora() {
   const hora = new Date().getHours();
@@ -1250,35 +1253,63 @@ function obtenerSaludoSegunHora() {
 }
 
 function construirMensajeWhatsApp(reg) {
-  const saludo = obtenerSaludoSegunHora();
-  const regional = reg.regional_nombre || 'Regional Quindío';
-  const fecha = reg.fecha;
-  const sede = reg.sede_nombre || reg.sede || '';
-  const prestacion = reg.prestacion;
-  const fallecido = reg.nombre_fallecido;
-  const concepto = reg.obs_admon || 'Servicio de cafetería';
-  const auxiliar = reg.auxiliar_nombre;
-  const h_in = reg.hora_ingreso;
-  const h_out = reg.hora_salida;
-  const total_h = reg.total_horas;
-  const turno = reg.turno;
-  const valor = Math.round(reg.valor_a_pagar).toLocaleString();
+  reg = reg || {};
 
-  return `${saludo}
-💰 REPORTE GASTOS DE CAFETERÍA
-☺️ Regional: ${regional}
-Fecha: ${fecha}
-Sede: ${sede}
-Prestación: ${prestacion}
-Nombre del fallecido: ${fallecido}
-Concepto: ${concepto}
-Nombre auxiliar: ${auxiliar}
-Hora de inicio: ${h_in}
-Hora de salida: ${h_out}
-Total de horas: ${total_h}
-Turno de cafetería: ${turno}
-Valor a cancelar: $${valor}
-SMS App Datos de Cafetería.`;
+  const saludo = obtenerSaludoSegunHora();
+  const linea = '──────────────────────';
+
+  const regional = reg.regional_nombre || 'Regional Quindío';
+  const sede = reg.sede_nombre || reg.sede || '';
+  const concepto = reg.obs_admon && String(reg.obs_admon).trim()
+    ? String(reg.obs_admon).trim()
+    : 'Servicio de cafetería';
+
+  // total_horas puede llegar como número (12) o como texto ("12" / "12 h")
+  const totalHoras = String(reg.total_horas == null ? '' : reg.total_horas)
+    .replace(/\s*h\s*$/i, '')
+    .trim();
+
+  const turno = reg.turno || '';
+  const iconoTurno = turno === 'Turno Diurno' ? '☀️'
+                   : turno === 'Turno Nocturno' ? '🌙'
+                   : turno ? '🌗' : '';
+
+  const valorNumero = Number(reg.valor_a_pagar) || 0;
+  const valor = Math.round(valorNumero).toLocaleString('es-CO');
+
+  const lineas = [
+    `*${saludo}*`,
+    '',
+    '*REPORTE GASTOS DE CAFETERÍA* ☕💰',
+    linea,
+    `*Regional:* ${regional}`,
+    `*Fecha:* ${reg.fecha || ''}`,
+    `*Sede:* ${sede}`,
+    `*Prestación:* ${reg.prestacion || ''}`,
+    `*Nombre del fallecido:* ${reg.nombre_fallecido || ''}`,
+    `*Nombre auxiliar:* ${reg.auxiliar_nombre || ''}`
+  ];
+
+  // El coordinador solo se muestra si existe
+  if (reg.coordinador_nombre && String(reg.coordinador_nombre).trim()) {
+    lineas.push(`*Coordinador:* ${String(reg.coordinador_nombre).trim()}`);
+  }
+
+  lineas.push(
+    `*Hora de inicio:* ${reg.hora_ingreso || ''}`,
+    `*Hora de salida:* ${reg.hora_salida || ''}`,
+    `*Total de horas:* ${totalHoras ? totalHoras + ' h' : ''}`,
+    `*Turno de cafetería:* ${(turno + ' ' + iconoTurno).trim()}`,
+    linea,
+    `📝 *Concepto:* ${concepto}`,
+    '',
+    `💵 *Valor a cancelar:* $${valor}`,
+    '✅ *Estado:* Servicio registrado',
+    '',
+    '_SMS App Datos de Cafetería._'
+  );
+
+  return lineas.join('\n');
 }
 
 function abrirModalWhatsApp(reg) {
@@ -1292,14 +1323,25 @@ function prepararWhatsAppDesdeFila(reg) {
   abrirModalWhatsApp(reg);
 }
 
+// Abre el mensaje desde la tabla usando el id (evita problemas con comillas en los nombres)
+function prepararWhatsAppPorId(id) {
+  const reg = (window._registrosFilas || []).find(r => r.id == id);
+  if (!reg) { showToast('Registro no encontrado', 'danger'); return; }
+  abrirModalWhatsApp(reg);
+}
+
 function lanzarWhatsApp() {
-  const phone = document.getElementById('wa-input-phone').value.replace(/[^0-9]/g, '');
+  let phone = (document.getElementById('wa-input-phone').value || '').replace(/[^0-9]/g, '');
   const texto = document.getElementById('wa-preview-text').value;
+
+  // Celular colombiano de 10 dígitos (empieza por 3): se agrega el indicativo 57
+  if (phone.length === 10 && phone.charAt(0) === '3') phone = '57' + phone;
 
   // Número opcional: sin número, WhatsApp abre su selector de contactos/grupos
   const url = phone
     ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(texto)}`
     : `https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`;
+
   window.open(url, '_blank');
   cerrarModal('modal-whatsapp');
   showToast('Abriendo WhatsApp con el reporte...', 'success');
