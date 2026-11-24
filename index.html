@@ -188,6 +188,17 @@ header{grid-row:1}nav{grid-column:1;grid-row:2}main{grid-column:2;grid-row:2;min
 .chat .csend{height:38px;border-radius:99px;padding:0 18px}
 .lb{position:fixed;inset:0;background:#000c;z-index:30;display:grid;place-items:center;cursor:zoom-out;padding:20px}.lb img{max-width:100%;max-height:100%;border-radius:8px}
 @media(max-width:760px){.chat{grid-template-columns:1fr}.chat .cmain{display:none}.chat.open .cside{display:none}.chat.open .cmain{display:flex}.chat .cback{display:inline-block}.bub{max-width:88%}}
+/* ===== Política de tratamiento de datos ===== */
+#pol{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:14px;z-index:40}
+#pol .pc{background:var(--card);color:var(--ink);border-radius:14px;max-width:780px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px #0006}
+#pol .ph{padding:18px 22px 12px;border-bottom:1px solid var(--line)}#pol .ph h2{margin:0;font-size:19px}#pol .ph small{color:var(--mut)}
+#pol .pb{padding:6px 22px 14px;overflow:auto;font-size:13.5px;line-height:1.6}
+#pol .pb h4{margin:16px 0 4px;font-size:14px}#pol .pb p{margin:4px 0}#pol .pb ul{margin:4px 0 4px 18px;padding:0}
+#pol .pf{padding:12px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end}
+#pol mark{background:#fff3a3;color:#000;padding:0 3px;border-radius:3px}
+.chk{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--mut);margin:6px 0 4px;line-height:1.45;cursor:pointer}
+.chk input{margin-top:2px;width:auto;height:auto;flex:none}.chk a{color:#4a00ff;font-weight:700;cursor:pointer}
+.auth .cred .pl{color:#4a00ff;cursor:pointer;font-weight:700}
 </style></head><body>
 
 <!-- Si algo falla al cargar, se muestra el motivo en pantalla en vez de dejarla en blanco -->
@@ -207,7 +218,7 @@ window.addEventListener('error',function(e){
 <form id="f-login"><div class="fld"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><input name="usuario" type="text" placeholder="Usuario o correo" required autocomplete="username"></div><div class="fld"><svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><input name="clave" type="password" placeholder="Contraseña" required autocomplete="current-password"><button type="button" class="eye" onclick="verClave(this)" aria-label="Mostrar clave">👁</button></div>
 <div class="err" id="e-login"></div><button class="btn go">Ingresar →</button></form><div class="alt">¿Nuevo aquí? <a onclick="goReg()">Solicitar acceso</a></div><div class="cred">Diseñado y creado por Zaider J. Buitrago A.</div></div><div class="vs"><img src="logo-jr.png" alt=""><h3>Portal Jardines del Renacer</h3><p>Tu oficina de trabajo</p><ul><li>Una sola entrada para todas tus aplicaciones</li><li>Cada persona ve solo lo que el administrador le asignó</li><li>Acceso seguro con tu usuario único</li></ul></div></div></div>
 <div id="v-reg" class="auth hide"><div class="card"><div class="fm"><div class="brand"><img src="logo-jr.png" alt=""><div><b>Portal Jardines del Renacer</b><small>Tu oficina de trabajo</small></div></div><h2>Solicitar acceso</h2><p class="lead">Crea tu usuario. El administrador lo activará y te asignará tus aplicaciones.</p>
-<form id="f-reg"><div class="fld"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M15 9h3M15 13h3M6 17c.5-2 5.5-2 6 0"/></svg><input name="nombre" type="text" placeholder="Nombre completo" required autocomplete="name"></div><div class="fld"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><input name="usuario" type="text" placeholder="Usuario (por ejemplo, tu cédula)" required autocomplete="username"></div><div class="fld"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><input name="correo" type="email" placeholder="Correo (opcional)" autocomplete="email"></div><div class="fld"><svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><input name="clave" type="password" placeholder="Clave (mín. 8 caracteres)" required minlength="8" autocomplete="new-password"><button type="button" class="eye" onclick="verClave(this)" aria-label="Mostrar clave">👁</button></div><div class="err" id="e-reg"></div><button class="btn go">Enviar solicitud →</button></form>
+<form id="f-reg"><div class="fld"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M15 9h3M15 13h3M6 17c.5-2 5.5-2 6 0"/></svg><input name="nombre" type="text" placeholder="Nombre completo" required autocomplete="name"></div><div class="fld"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><input name="usuario" type="text" placeholder="Usuario (por ejemplo, tu cédula)" required autocomplete="username"></div><div class="fld"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><input name="correo" type="email" placeholder="Correo (opcional)" autocomplete="email"></div><div class="fld"><svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><input name="clave" type="password" placeholder="Clave (mín. 8 caracteres)" required minlength="8" autocomplete="new-password"><button type="button" class="eye" onclick="verClave(this)" aria-label="Mostrar clave">👁</button></div><label class="chk"><input type="checkbox" name="acepta_politica" value="v1-2026-11-24" required><span>He leído y acepto la <a onclick="polOpen(event)">Política de Tratamiento de Datos Personales</a> y autorizo el tratamiento de mis datos para el uso del portal.</span></label><div class="err" id="e-reg"></div><button class="btn go">Enviar solicitud →</button></form>
 <div class="alt">¿Ya tienes cuenta? <a onclick="goLogin()">Inicia sesión</a></div><div class="cred">Diseñado y creado por Zaider J. Buitrago A.</div></div><div class="vs"><img src="logo-jr.png" alt=""><h3>Portal Jardines del Renacer</h3><p>Tu oficina de trabajo</p><ul><li>Una sola entrada para todas tus aplicaciones</li><li>Cada persona ve solo lo que el administrador le asignó</li><li>Acceso seguro con tu usuario único</li></ul></div></div></div>
 
 <div id="shell" class="hide">
@@ -216,7 +227,7 @@ window.addEventListener('error',function(e){
 <div id="bell-wrap" class="hide"><button id="bell" type="button" title="Notificaciones" aria-label="Notificaciones" onclick="notifToggle(event)"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bd hide" id="bell-n">0</span></button><div id="npanel" class="hide"></div></div>
 <div style="text-align:right"><b id="h-name"></b><small id="h-user"></small></div><span class="tag" id="h-rol"></span></header>
 <nav id="nav"></nav><main id="main"></main><div id="appsHost" aria-live="polite"></div></div>
-<div id="modal" class="hide"></div><div id="toast" class="hide"></div>
+<div id="pol" class="hide"></div><div id="modal" class="hide"></div><div id="toast" class="hide"></div>
 
 <script>
 /* ============ CONFIGURACIÓN ============ */
@@ -329,7 +340,7 @@ function show(){
   const adm=u.rol==='admin';notifInit(adm);
   $('#nav').innerHTML=`<h6>Mi espacio</h6><a data-v="home">🏢 Oficina</a><a data-v="chat">💬 Chat <span class="nb hide" id="nb-chat"></span></a><h6>Mis aplicaciones</h6>`+
     (myApps().map(a=>a.id==='cafeteria'?cafGroup(a):a.id==='calidad'?calGroup(a):`<a data-v="${a.id}">${a.icono} ${esc(a.nombre)}</a>`).join('')||'<a style="color:var(--mut);cursor:default">Sin aplicaciones asignadas</a>')+
-    (adm?`<h6>Administración</h6><a data-v="users">👥 Usuarios y accesos</a>`:'')+`<h6>Cuenta</h6><a data-v="perfil">🔑 Mi cuenta</a><a class="logout" onclick="logout()">⏻ Cerrar sesión</a>`;
+    (adm?`<h6>Administración</h6><a data-v="users">👥 Usuarios y accesos</a>`:'')+`<h6>Cuenta</h6><a data-v="perfil">🔑 Mi cuenta</a><a onclick="polOpen(event)">📄 Política de datos</a><a class="logout" onclick="logout()">⏻ Cerrar sesión</a>`;
   $('#nav').onclick=e=>{
     const c=e.target.closest('a[data-cs]');if(c){goCal(c.dataset.cs);return}
     const s=e.target.closest('a[data-s]');if(s){goCaf(s.dataset.s);return}
@@ -542,6 +553,66 @@ function editUser(id){
     await api('saveUser',{user:d});$('#modal').classList.add('hide');toast('Usuario guardado');users()});
 }
 async function delUser(id){if(!confirm('¿Eliminar este usuario? Perderá todos sus accesos.'))return;try{await api('deleteUser',{id});toast('Usuario eliminado');users()}catch(e){toast(e.message)}}
+/* ============ Política de Tratamiento de Datos Personales (Ley 1581 de 2012) ============
+   Completa los datos de POL_CFG (los que empiezan por "[" salen resaltados hasta que los llenes). */
+const POL_CFG={
+  razon:'[RAZÓN SOCIAL COMPLETA DE JARDINES DEL RENACER]',
+  nit:'[NIT]',
+  dir:'[DIRECCIÓN PRINCIPAL, CIUDAD]',
+  correo:'[CORREO PARA CONSULTAS Y RECLAMOS]',
+  tel:'[TELÉFONO]',
+  area:'[ÁREA O CARGO RESPONSABLE, p. ej. Gerencia / Talento Humano]',
+  version:'1.0',fecha:'24 de noviembre de 2026'
+};
+const polV=v=>String(v).startsWith('[')?`<mark>${esc(v)}</mark>`:esc(v);
+function polOpen(e){
+  e&&e.preventDefault&&e.preventDefault();
+  const c=POL_CFG,p=$('#pol');
+  p.innerHTML=`<div class="pc" role="dialog" aria-modal="true" aria-label="Política de Tratamiento de Datos Personales">
+  <div class="ph"><h2>Política de Tratamiento de Datos Personales</h2><small>Portal Jardines del Renacer · Versión ${esc(c.version)} · Vigente desde el ${esc(c.fecha)}</small></div>
+  <div class="pb">
+  <p>En cumplimiento de la Ley Estatutaria 1581 de 2012, el Decreto 1074 de 2015 (que compila el Decreto 1377 de 2013) y demás normas que las modifiquen, esta política describe cómo se recolectan, usan y protegen los datos personales de quienes utilizan el Portal Jardines del Renacer y sus aplicaciones.</p>
+  <h4>1. Responsable del tratamiento</h4>
+  <p><b>${polV(c.razon)}</b>, NIT ${polV(c.nit)}. Domicilio: ${polV(c.dir)}. Correo: ${polV(c.correo)}. Teléfono: ${polV(c.tel)}.</p>
+  <h4>2. Datos que se recolectan</h4>
+  <ul><li>Datos de identificación y de cuenta: nombre completo, usuario (que puede ser el número de cédula), correo electrónico (opcional) y contraseña.</li>
+  <li>Datos de uso: aplicaciones y permisos asignados, fecha de creación y estado de la cuenta, registros de acceso y de las operaciones realizadas en las aplicaciones.</li>
+  <li>Datos del chat interno: mensajes, archivos adjuntos y fotografía de perfil, cuando el usuario decide cargarla.</li>
+  <li>Datos operativos que los usuarios registran en las aplicaciones del portal para la gestión de los servicios de la empresa.</li></ul>
+  <p>No se solicitan datos sensibles. Si algún usuario los incluye voluntariamente (por ejemplo en un mensaje o archivo), no está obligado a hacerlo y puede pedir su eliminación.</p>
+  <h4>3. Finalidades del tratamiento</h4>
+  <ul><li>Crear, validar, administrar y proteger las cuentas de acceso y asignar las aplicaciones y permisos correspondientes.</li>
+  <li>Permitir el uso de las aplicaciones del portal y la comunicación interna entre usuarios.</li>
+  <li>Llevar el control, la trazabilidad y la auditoría de las operaciones realizadas en el sistema.</li>
+  <li>Garantizar la seguridad de la información y prevenir accesos no autorizados o usos indebidos.</li>
+  <li>Atender consultas, solicitudes, reclamos y requerimientos de autoridades competentes.</li></ul>
+  <h4>4. Autorización</h4>
+  <p>El tratamiento se realiza con la autorización previa, expresa e informada del titular, que se otorga al marcar la casilla de aceptación al solicitar el acceso. El titular puede revocarla en cualquier momento, salvo que exista un deber legal o contractual de conservar los datos.</p>
+  <h4>5. Derechos del titular</h4>
+  <ul><li>Conocer, actualizar y rectificar sus datos personales.</li>
+  <li>Solicitar prueba de la autorización otorgada.</li>
+  <li>Ser informado, previa solicitud, del uso que se ha dado a sus datos.</li>
+  <li>Presentar quejas ante la Superintendencia de Industria y Comercio por infracciones a la ley.</li>
+  <li>Revocar la autorización y/o solicitar la supresión del dato cuando no se respeten los principios, derechos y garantías legales.</li>
+  <li>Acceder de forma gratuita a sus datos personales.</li></ul>
+  <h4>6. Atención de consultas y reclamos</h4>
+  <p>Para ejercer sus derechos, el titular puede escribir a ${polV(c.correo)} (${polV(c.area)}), indicando su nombre, usuario, descripción de la solicitud y datos de contacto. Las consultas se responden en un máximo de diez (10) días hábiles y los reclamos en un máximo de quince (15) días hábiles, contados desde su recibo; estos plazos pueden prorrogarse en los términos de la ley, informando al titular los motivos.</p>
+  <h4>7. Seguridad, encargados y proveedores tecnológicos</h4>
+  <p>Se aplican medidas técnicas y administrativas razonables para proteger la información contra pérdida, acceso o uso no autorizado. Para operar el portal se utilizan servicios de terceros (como Google Workspace / Google Apps Script, Hojas de cálculo y Drive, y GitHub Pages para el alojamiento), que actúan como encargados del tratamiento y pueden almacenar o procesar datos en servidores ubicados fuera de Colombia. El acceso a los datos se restringe a las personas autorizadas según su rol.</p>
+  <h4>8. Conservación</h4>
+  <p>Los datos se conservan mientras la cuenta esté activa y durante el tiempo necesario para cumplir las finalidades descritas y las obligaciones legales, contractuales o de auditoría aplicables. Cuando dejan de ser necesarios, se suprimen o anonimizan.</p>
+  <h4>9. Menores de edad</h4>
+  <p>El portal está dirigido a personas mayores de edad vinculadas con la empresa y no recolecta intencionalmente datos de menores.</p>
+  <h4>10. Vigencia y cambios</h4>
+  <p>Esta política rige desde la fecha indicada. Cualquier cambio sustancial se comunicará a los titulares a través del portal antes de su aplicación o, a más tardar, al momento de implementarlo.</p>
+  </div>
+  <div class="pf"><button type="button" class="btn" onclick="polClose()">Cerrar</button></div></div>`;
+  p.classList.remove('hide');
+}
+function polClose(){$('#pol').classList.add('hide')}
+document.addEventListener('click',e=>{if(e.target.id==='pol')polClose()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#pol').classList.contains('hide'))polClose()});
+
 /* ============ Sonido de notificación ============
    Tono generado con Web Audio (sin archivos). Los navegadores exigen una interacción previa
    del usuario para reproducir audio, por eso se "desbloquea" con el primer clic/tecla/toque. */
