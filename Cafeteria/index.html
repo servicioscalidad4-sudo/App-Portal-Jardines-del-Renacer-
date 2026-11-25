@@ -717,6 +717,7 @@
                     <th>Hora Nocturna ($ COP)</th>
                     <th>Vigencia</th>
                     <th>Estado</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="tabla-tarifas-body">
@@ -1042,11 +1043,12 @@
   <div class="modal-overlay" id="modal-nueva-tarifa">
     <div class="modal-card" style="max-width: 520px;">
       <div class="modal-header">
-        <h3>Configurar Tarifa Anual de Cafetería</h3>
+        <h3 id="modal-tarifa-titulo">Configurar Tarifa Anual de Cafetería</h3>
         <button class="btn btn-sm btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.4);" onclick="cerrarModal('modal-nueva-tarifa')">✕</button>
       </div>
       <form onsubmit="guardarNuevaTarifa(event)">
         <div class="modal-body">
+          <input type="hidden" id="modal-tarifa-id" value="">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
             <div class="form-group">
               <label>Año de Vigencia *</label>
@@ -1074,6 +1076,13 @@
               <label>Valor Hora Nocturna ($ COP) *</label>
               <input type="number" id="modal-tarifa-nocturna" class="form-control" value="7500" required step="50">
             </div>
+          </div>
+          <div class="form-group" style="margin-top: 12px;">
+            <label>Estado</label>
+            <select id="modal-tarifa-estado" class="form-control">
+              <option value="activo">Vigente</option>
+              <option value="inactivo">Inactiva</option>
+            </select>
           </div>
         </div>
         <div class="modal-footer">
