@@ -182,6 +182,45 @@ async function cargarRegistrosRemotos(force) {
   return false;
 }
 
+// ============================================================================
+// TARIFAS: Google Sheets (hoja Tarifas) es la fuente de verdad, con caché local
+// ============================================================================
+let _ultimaCargaTarifas = 0;
+function getTarifas() {
+  try {
+    const g = JSON.parse(localStorage.getItem('jr_client_tarifas') || 'null');
+    if (Array.isArray(g) && g.length) return g;
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_TARIFAS));
+}
+function saveTarifas(lista) { localStorage.setItem('jr_client_tarifas', JSON.stringify(lista)); }
+async function cargarTarifasRemotas(force) {
+  if (!force && Date.now() - _ultimaCargaTarifas < 10000) return false;
+  try {
+    const r = await llamarSheets({ action: 'listTarifas' });
+    if (r && r.success && Array.isArray(r.tarifas) && r.tarifas.length) {
+      saveTarifas(r.tarifas);
+      _ultimaCargaTarifas = Date.now();
+      return true;
+    }
+    console.warn('Tarifas remotas no disponibles:', r && r.error);
+  } catch (e) {
+    console.warn('Sin conexión con Google Sheets para tarifas, se usa la copia local', e);
+  }
+  return false;
+}
+// Tarifa vigente según el año de la fecha: primero la de la sede, si no la de "Todas las Sedes"
+function tarifaParaFecha(fecha, sedeNombre) {
+  const anio = Number(String(fecha || '').substring(0, 4)) || new Date().getFullYear();
+  const act = getTarifas().filter(t => Number(t.anio) === anio && t.activo);
+  const t = (sedeNombre && act.find(x => normNombre(x.sede_nombre) === normNombre(sedeNombre)))
+    || act.find(x => /todas/i.test(x.sede_nombre || ''))
+    || act[0];
+  return t
+    ? { diurna: Number(t.valor_hora_diurna) || 5900, nocturna: Number(t.valor_hora_nocturna) || 7500 }
+    : { diurna: 5900, nocturna: 7500 };
+}
+
 // Vuelve a leer de Sheets y repuebla estado y listas desplegables
 async function refrescarCatalogos() {
   await cargarCatalogoRemoto(true);
@@ -467,13 +506,15 @@ function procesarSolicitudCliente(endpoint, method, body) {
   if (endpoint.startsWith('/api/auxiliares')) {
     return cargarCatalogoRemoto().then(() => ({ auxiliares: getCatalogo('auxiliares') }));
   }
-  if (endpoint.startsWith('/api/tarifas')) return { tarifas: DEFAULT_TARIFAS };
+  if (endpoint.startsWith('/api/tarifas')) return { tarifas: getTarifas() };
 
   // 4. Cálculo instantáneo
   if (endpoint === '/api/calc/horas-valor') {
     const calc = calcularHorasYTurnoClient(body.hora_ingreso, body.hora_salida);
-    const vDiurna = 5900;
-    const vNocturna = 7500;
+    const _sedeCalc = (DEFAULT_SEDES.find(x => x.id == body.sede_id) || {}).nombre;
+    const _tf = tarifaParaFecha(body.fecha, _sedeCalc);
+    const vDiurna = _tf.diurna;
+    const vNocturna = _tf.nocturna;
     const subDiurno = Math.round(calc.horas_diurnas * vDiurna);
     const subNocturno = Math.round(calc.horas_nocturnas * vNocturna);
     return {
@@ -534,7 +575,8 @@ function procesarSolicitudCliente(endpoint, method, body) {
     const anio = (body.fecha || '').substring(0, 4) || '2026';
     const consecutivo = `CAF-${anio}-${('00000' + nextId).slice(-5)}`;
     const calc = calcularHorasYTurnoClient(body.hora_ingreso, body.hora_salida);
-    const vTotal = Math.round((calc.horas_diurnas * 5900) + (calc.horas_nocturnas * 7500));
+    const _tf = tarifaParaFecha(body.fecha || (regs.find(r => r.id == (typeof id !== 'undefined' ? id : 0)) || {}).fecha, (DEFAULT_SEDES.find(x => x.id == body.sede_id) || {}).nombre);
+    const vTotal = Math.round((calc.horas_diurnas * _tf.diurna) + (calc.horas_nocturnas * _tf.nocturna));
 
     const nuevo = {
       id: nextId,
@@ -576,7 +618,8 @@ function procesarSolicitudCliente(endpoint, method, body) {
     if (!puedeGestionarRegistro(regs[idx])) return { success: false, error: 'No tienes permiso para modificar registros de otra sede.' };
     if (esRolSede()) body.sede_id = state.user.sede_id;
     const calc = calcularHorasYTurnoClient(body.hora_ingreso, body.hora_salida);
-    const vTotal = Math.round((calc.horas_diurnas * 5900) + (calc.horas_nocturnas * 7500));
+    const _tf = tarifaParaFecha(body.fecha || (regs.find(r => r.id == (typeof id !== 'undefined' ? id : 0)) || {}).fecha, (DEFAULT_SEDES.find(x => x.id == body.sede_id) || {}).nombre);
+    const vTotal = Math.round((calc.horas_diurnas * _tf.diurna) + (calc.horas_nocturnas * _tf.nocturna));
     const actualizado = {
       ...regs[idx], ...body, ...calc, valor_a_pagar: vTotal,
       sede_nombre: DEFAULT_SEDES.find(s => s.id == body.sede_id)?.nombre || regs[idx].sede_nombre,
@@ -780,7 +823,7 @@ async function inicializarApp() {
     cargarCoordinadores(),
     cargarAuxiliares()
   ]);
-  await cargarRegistrosRemotos(true);
+  await Promise.all([cargarRegistrosRemotos(true), cargarTarifasRemotas(true)]);
 
   aplicarRestriccionSede();
   navigateTo('dashboard');
@@ -1440,29 +1483,109 @@ function descargarExcelCSV() {
 // ADMINISTRACIÓN DE TARIFAS ANUALES
 // ============================================================================
 async function cargarTarifas() {
-  const res = await apiRequest('/api/tarifas');
-  if (!res || !res.tarifas) return;
+  await cargarTarifasRemotas();
+  const lista = getTarifas().slice().sort((a, b) => b.anio - a.anio || String(a.sede_nombre).localeCompare(String(b.sede_nombre)));
 
+  const sel = document.getElementById('filtro-tarifa-anio');
+  const previo = sel.value;
+  const anios = [...new Set(lista.map(t => String(t.anio)))];
+  sel.innerHTML = '<option value="">Todos los años</option>' + anios.map(a => `<option value="${a}">Año ${a}</option>`).join('');
+  sel.value = anios.includes(previo) ? previo : '';
+
+  const filtro = sel.value;
+  const filas = filtro ? lista.filter(t => String(t.anio) === filtro) : lista;
   const tbody = document.getElementById('tabla-tarifas-body');
-  tbody.innerHTML = res.tarifas.map(t => `
+  tbody.innerHTML = filas.map(t => `
     <tr>
       <td><strong>${t.anio}</strong></td>
-      <td>${t.regional_nombre}</td>
-      <td>${t.sede_nombre}</td>
-      <td style="font-weight: 700; color: #166534;">$ ${t.valor_hora_diurna.toLocaleString()} COP</td>
-      <td style="font-weight: 700; color: #1e40af;">$ ${t.valor_hora_nocturna.toLocaleString()} COP</td>
-      <td>${t.vigencia_desde} a ${t.vigencia_hasta}</td>
+      <td>${escHtml(t.regional_nombre)}</td>
+      <td>${escHtml(t.sede_nombre)}</td>
+      <td style="font-weight: 700; color: #166534;">$ ${Number(t.valor_hora_diurna).toLocaleString()} COP</td>
+      <td style="font-weight: 700; color: #1e40af;">$ ${Number(t.valor_hora_nocturna).toLocaleString()} COP</td>
+      <td>${escHtml(t.vigencia_desde)} a ${escHtml(t.vigencia_hasta)}</td>
       <td><span class="badge ${t.activo ? 'badge-activo' : 'badge-anulado'}">${t.activo ? 'Vigente' : 'Inactiva'}</span></td>
+      <td><button class="btn btn-sm btn-outline" onclick="editarTarifa(${t.id})">✏️ Editar</button></td>
     </tr>
-  `).join('');
+  `).join('') || '<tr><td colspan="8" style="text-align:center;">No hay tarifas para este año</td></tr>';
 }
 
-function abrirModalNuevaTarifa() { abrirModal('modal-nueva-tarifa'); }
-function abrirModalCopiarTarifas() { showToast('Tarifas 2026 copiadas a 2027 correctamente', 'success'); }
-function guardarNuevaTarifa(e) {
+function _prepararModalTarifa(t) {
+  const editando = !!t;
+  document.getElementById('modal-tarifa-titulo').innerText = editando ? `Editar Tarifa ${t.anio}` : 'Configurar Tarifa Anual de Cafetería';
+  document.getElementById('modal-tarifa-id').value = editando ? t.id : '';
+  const anio = document.getElementById('modal-tarifa-anio');
+  const sede = document.getElementById('modal-tarifa-sede');
+  anio.value = editando ? t.anio : new Date().getFullYear();
+  anio.disabled = editando;   // el año y la sede no cambian al editar (se crea una tarifa nueva para eso)
+  sede.disabled = editando;
+  if (editando) {
+    const op = Array.from(sede.options).find(o => o.value && normNombre(o.text) === normNombre(t.sede_nombre));
+    sede.value = op ? op.value : '';
+  } else {
+    sede.value = '';
+  }
+  document.getElementById('modal-tarifa-diurna').value = editando ? t.valor_hora_diurna : 5900;
+  document.getElementById('modal-tarifa-nocturna').value = editando ? t.valor_hora_nocturna : 7500;
+  document.getElementById('modal-tarifa-estado').value = editando && !t.activo ? 'inactivo' : 'activo';
+}
+
+function abrirModalNuevaTarifa() { _prepararModalTarifa(null); abrirModal('modal-nueva-tarifa'); }
+function editarTarifa(id) {
+  const t = getTarifas().find(x => x.id == id);
+  if (!t) { showToast('Tarifa no encontrada', 'danger'); return; }
+  _prepararModalTarifa(t);
+  abrirModal('modal-nueva-tarifa');
+}
+
+async function enviarTarifa(payload) {
+  try {
+    const r = await llamarSheets(Object.assign({ action: 'saveTarifa', token: state.sheetsToken, usuario: state.user ? state.user.usuario : '' }, payload));
+    if (r && r.error === 'Acción no válida') return { success: false, error: 'El Apps Script no tiene la versión nueva de tarifas. Impleméntalo como "Nueva versión".' };
+    return r || { success: false, error: 'Sin respuesta de Google Sheets.' };
+  } catch (e) {
+    return { success: false, error: 'No hay conexión con Google Sheets. Intenta de nuevo.' };
+  }
+}
+
+async function guardarNuevaTarifa(e) {
   e.preventDefault();
-  showToast('Tarifa configurada exitosamente', 'success');
-  cerrarModal('modal-nueva-tarifa');
+  const btn = e.target.querySelector('button[type="submit"]');
+  const sede = document.getElementById('modal-tarifa-sede');
+  const payload = {
+    id: Number(document.getElementById('modal-tarifa-id').value) || 0,
+    anio: Number(document.getElementById('modal-tarifa-anio').value),
+    sede: sede.value ? sede.options[sede.selectedIndex].text : 'Todas las Sedes',
+    diurna: Number(document.getElementById('modal-tarifa-diurna').value),
+    nocturna: Number(document.getElementById('modal-tarifa-nocturna').value),
+    estado: document.getElementById('modal-tarifa-estado').value
+  };
+  btn.disabled = true;
+  const r = await enviarTarifa(payload);
+  btn.disabled = false;
+  if (r.success) {
+    cerrarModal('modal-nueva-tarifa');
+    showToast(payload.id ? 'Tarifa actualizada' : 'Tarifa creada', 'success');
+    await cargarTarifasRemotas(true);
+    cargarTarifas();
+  } else {
+    showToast(r.error || 'No se pudo guardar la tarifa', 'danger');
+  }
+}
+
+async function abrirModalCopiarTarifas() {
+  const lista = getTarifas();
+  const maxAnio = Math.max(...lista.map(t => Number(t.anio)));
+  const destino = maxAnio + 1;
+  const origen = lista.filter(t => Number(t.anio) === maxAnio && t.activo);
+  if (!origen.length) { showToast('No hay tarifas vigentes para copiar', 'danger'); return; }
+  if (!confirm(`¿Copiar las tarifas de ${maxAnio} al año ${destino}?`)) return;
+  for (const t of origen) {
+    const r = await enviarTarifa({ id: 0, anio: destino, sede: t.sede_nombre, diurna: t.valor_hora_diurna, nocturna: t.valor_hora_nocturna, estado: 'activo' });
+    if (!r.success) { showToast(r.error || 'No se pudo copiar', 'danger'); return; }
+  }
+  showToast(`Tarifas ${maxAnio} copiadas a ${destino}`, 'success');
+  await cargarTarifasRemotas(true);
+  cargarTarifas();
 }
 
 // ============================================================================
