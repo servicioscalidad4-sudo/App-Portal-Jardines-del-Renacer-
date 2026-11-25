@@ -62,9 +62,21 @@ const DEFAULT_AUXILIARES = [
 ];
 
 const DEFAULT_TARIFAS = [
-  { id: 1, anio: 2026, regional_id: 1, regional_nombre: 'Regional Quindío', sede_nombre: 'Todas las Sedes', valor_hora_diurna: 5900, valor_hora_nocturna: 7500, vigencia_desde: '2026-01-01', vigencia_hasta: '2026-12-31', activo: 1 },
-  { id: 2, anio: 2027, regional_id: 1, regional_nombre: 'Regional Quindío', sede_nombre: 'Todas las Sedes', valor_hora_diurna: 5900, valor_hora_nocturna: 7500, vigencia_desde: '2027-01-01', vigencia_hasta: '2027-12-31', activo: 1 }
+  { id: 1, anio: 2026, regional_id: 1, regional_nombre: 'Regional Quindío', sede_nombre: 'Todas las Sedes', valor_turno_dia: 85000, valor_turno_noche: 120000, valor_hora_extra: 7900, vigencia_desde: '2026-01-01', vigencia_hasta: '2026-12-31', activo: 1 },
+  { id: 2, anio: 2026, regional_id: 1, regional_nombre: 'Regional Quindío', sede_nombre: 'Armenia', valor_turno_dia: 100000, valor_turno_noche: 120000, valor_hora_extra: 7900, vigencia_desde: '2026-01-01', vigencia_hasta: '2026-12-31', activo: 1 },
+  { id: 3, anio: 2027, regional_id: 1, regional_nombre: 'Regional Quindío', sede_nombre: 'Todas las Sedes', valor_turno_dia: 85000, valor_turno_noche: 120000, valor_hora_extra: 7900, vigencia_desde: '2027-01-01', vigencia_hasta: '2027-12-31', activo: 1 },
+  { id: 4, anio: 2027, regional_id: 1, regional_nombre: 'Regional Quindío', sede_nombre: 'Armenia', valor_turno_dia: 100000, valor_turno_noche: 120000, valor_hora_extra: 7900, vigencia_desde: '2027-01-01', vigencia_hasta: '2027-12-31', activo: 1 }
 ];
+
+// Tabla oficial de Turnos de Cafetería (7:00 a.m. - 7:00 p.m. | 7:00 p.m. - 7:00 a.m.)
+const TURNO_HORAS = 12;
+const INICIO_DIA_MIN = 420;   // 7:00 a.m.
+const FIN_DIA_MIN = 1140;     // 7:00 p.m.
+const SEDES_PRINCIPALES = ['pereira', 'armenia', 'cali', 'ibague', 'cartago', 'girardot', 'tulua', 'fusagasuga'];
+const TURNO_DIA_PRINCIPAL = 100000;
+const TURNO_DIA_RESTO = 85000;
+const TURNO_NOCHE_DEFECTO = 120000;
+const HORA_EXTRA_DEFECTO = 7900;
 
 // ============================================================================
 // ROLES: ADMINISTRADOR (todo) | COORDINADOR (ve todas las sedes) | SEDE (solo su sede)
@@ -210,15 +222,20 @@ async function cargarTarifasRemotas(force) {
   return false;
 }
 // Tarifa vigente según el año de la fecha: primero la de la sede, si no la de "Todas las Sedes"
+function esSedePrincipal(sede) { return SEDES_PRINCIPALES.indexOf(normNombre(sede)) >= 0; }
 function tarifaParaFecha(fecha, sedeNombre) {
   const anio = Number(String(fecha || '').substring(0, 4)) || new Date().getFullYear();
-  const act = getTarifas().filter(t => Number(t.anio) === anio && t.activo);
+  // Se ignoran filas del formato antiguo (por hora) que aún no se hayan convertido en Sheets
+  const act = getTarifas().filter(t => Number(t.anio) === anio && t.activo &&
+    Number(t.valor_turno_dia) > 0 && Number(t.valor_turno_noche) > 0 && Number(t.valor_hora_extra) > 0);
   const t = (sedeNombre && act.find(x => normNombre(x.sede_nombre) === normNombre(sedeNombre)))
-    || act.find(x => /todas/i.test(x.sede_nombre || ''))
-    || act[0];
-  return t
-    ? { diurna: Number(t.valor_hora_diurna) || 5900, nocturna: Number(t.valor_hora_nocturna) || 7500 }
-    : { diurna: 5900, nocturna: 7500 };
+    || act.find(x => /^todas/i.test(normNombre(x.sede_nombre || '')));
+  if (t) return { turnoDia: Number(t.valor_turno_dia), turnoNoche: Number(t.valor_turno_noche), horaExtra: Number(t.valor_hora_extra) };
+  return {
+    turnoDia: esSedePrincipal(sedeNombre) ? TURNO_DIA_PRINCIPAL : TURNO_DIA_RESTO,
+    turnoNoche: TURNO_NOCHE_DEFECTO,
+    horaExtra: HORA_EXTRA_DEFECTO
+  };
 }
 
 // Vuelve a leer de Sheets y repuebla estado y listas desplegables
@@ -311,7 +328,7 @@ function calcularHorasYTurnoClient(hInStr, hOutStr) {
     let curr = tIn;
     for (let i = 0; i < totalMins; i++) {
       let mod = curr % 1440;
-      if (mod >= 360 && mod < 1140) dayMins++; // Diurno 6:00 a.m. - 7:00 p.m. | Nocturno 7:00 p.m. - 6:00 a.m.
+      if (mod >= INICIO_DIA_MIN && mod < FIN_DIA_MIN) dayMins++; // Diurno 7:00 a.m. - 7:00 p.m. | Nocturno 7:00 p.m. - 7:00 a.m.
       else nightMins++;
       curr++;
     }
@@ -328,6 +345,40 @@ function calcularHorasYTurnoClient(hInStr, hOutStr) {
   } catch (e) {
     return { total_horas: 12, horas_diurnas: 12, horas_nocturnas: 0, turno: 'Turno Diurno' };
   }
+}
+
+function fmtMoneda(n) { return '$' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+
+// Liquidación por turno (igual que el Apps Script):
+//  - 12 h o más: valor del TURNO (día o noche) + horas que pasen de 12 a la tarifa de hora adicional.
+//  - menos de 12 h: cada hora a la tarifa de hora adicional/inferior.
+//  - Turno día/noche: el que tenga más horas; si hay empate, el de la hora de ingreso.
+function liquidarServicioClient(calc, t, hIn) {
+  const total = calc.total_horas;
+  const p = String(hIn || '07:00').split(':').map(Number);
+  const inicioMin = (p[0] || 0) * 60 + (p[1] || 0);
+  let tipo;
+  if (calc.horas_nocturnas > calc.horas_diurnas) tipo = 'noche';
+  else if (calc.horas_diurnas > calc.horas_nocturnas) tipo = 'dia';
+  else tipo = (inicioMin >= INICIO_DIA_MIN && inicioMin < FIN_DIA_MIN) ? 'dia' : 'noche';
+
+  let vDia = 0, vNoche = 0, detalle, modo;
+  if (total >= TURNO_HORAS) {
+    modo = 'turno';
+    const base = tipo === 'noche' ? t.turnoNoche : t.turnoDia;
+    const extraH = Math.round((total - TURNO_HORAS) * 100) / 100;
+    const valor = base + Math.round(extraH * t.horaExtra);
+    if (tipo === 'noche') vNoche = valor; else vDia = valor;
+    detalle = 'Turno ' + (tipo === 'noche' ? 'noche ' : 'día ') + fmtMoneda(base) +
+      (extraH > 0 ? ' + ' + extraH + ' h adicionales × ' + fmtMoneda(t.horaExtra) : '');
+  } else {
+    modo = 'fraccion';
+    const totalV = Math.round(total * t.horaExtra);
+    vDia = Math.round(calc.horas_diurnas * t.horaExtra);
+    vNoche = totalV - vDia;
+    detalle = total + ' h × ' + fmtMoneda(t.horaExtra) + ' (menos de ' + TURNO_HORAS + ' h)';
+  }
+  return { tipo, modo, vDia, vNoche, total: vDia + vNoche, detalle };
 }
 
 // ============================================================================
@@ -513,17 +564,17 @@ function procesarSolicitudCliente(endpoint, method, body) {
     const calc = calcularHorasYTurnoClient(body.hora_ingreso, body.hora_salida);
     const _sedeCalc = (DEFAULT_SEDES.find(x => x.id == body.sede_id) || {}).nombre;
     const _tf = tarifaParaFecha(body.fecha, _sedeCalc);
-    const vDiurna = _tf.diurna;
-    const vNocturna = _tf.nocturna;
-    const subDiurno = Math.round(calc.horas_diurnas * vDiurna);
-    const subNocturno = Math.round(calc.horas_nocturnas * vNocturna);
+    const liq = liquidarServicioClient(calc, _tf, body.hora_ingreso);
     return {
       ...calc,
-      tarifa_hora_diurna: vDiurna,
-      tarifa_hora_nocturna: vNocturna,
-      subtotal_diurno: subDiurno,
-      subtotal_nocturno: subNocturno,
-      valor_a_pagar: subDiurno + subNocturno
+      modo: liq.modo,
+      tarifa_turno_dia: _tf.turnoDia,
+      tarifa_turno_noche: _tf.turnoNoche,
+      tarifa_hora_extra: _tf.horaExtra,
+      subtotal_diurno: liq.vDia,
+      subtotal_nocturno: liq.vNoche,
+      detalle_liquidacion: liq.detalle,
+      valor_a_pagar: liq.total
     };
   }
 
@@ -576,7 +627,8 @@ function procesarSolicitudCliente(endpoint, method, body) {
     const consecutivo = `CAF-${anio}-${('00000' + nextId).slice(-5)}`;
     const calc = calcularHorasYTurnoClient(body.hora_ingreso, body.hora_salida);
     const _tf = tarifaParaFecha(body.fecha || (regs.find(r => r.id == (typeof id !== 'undefined' ? id : 0)) || {}).fecha, (DEFAULT_SEDES.find(x => x.id == body.sede_id) || {}).nombre);
-    const vTotal = Math.round((calc.horas_diurnas * _tf.diurna) + (calc.horas_nocturnas * _tf.nocturna));
+    const _liq = liquidarServicioClient(calc, _tf, body.hora_ingreso);
+    const vTotal = _liq.total;
 
     const nuevo = {
       id: nextId,
@@ -584,6 +636,7 @@ function procesarSolicitudCliente(endpoint, method, body) {
       ...body,
       ...calc,
       valor_a_pagar: vTotal,
+      detalle_liquidacion: _liq.detalle,
       regional_nombre: 'Regional Quindío',
       sede_nombre: DEFAULT_SEDES.find(s => s.id == body.sede_id)?.nombre || 'Armenia',
       coordinador_nombre: nombreCoordinadorPorId(body.coordinador_id) || 'Coordinador',
@@ -606,7 +659,7 @@ function procesarSolicitudCliente(endpoint, method, body) {
       setTimeout(() => cargarRegistrosRemotos(true), 4000);
     } catch (e) {}
 
-    return { success: true, consecutivo, valor_a_pagar: vTotal, id: nextId };
+    return { success: true, consecutivo, valor_a_pagar: vTotal, detalle_liquidacion: _liq.detalle, id: nextId };
   }
 
   // 6b. Corregir (editar) registro
@@ -619,9 +672,10 @@ function procesarSolicitudCliente(endpoint, method, body) {
     if (esRolSede()) body.sede_id = state.user.sede_id;
     const calc = calcularHorasYTurnoClient(body.hora_ingreso, body.hora_salida);
     const _tf = tarifaParaFecha(body.fecha || (regs.find(r => r.id == (typeof id !== 'undefined' ? id : 0)) || {}).fecha, (DEFAULT_SEDES.find(x => x.id == body.sede_id) || {}).nombre);
-    const vTotal = Math.round((calc.horas_diurnas * _tf.diurna) + (calc.horas_nocturnas * _tf.nocturna));
+    const _liq = liquidarServicioClient(calc, _tf, body.hora_ingreso);
+    const vTotal = _liq.total;
     const actualizado = {
-      ...regs[idx], ...body, ...calc, valor_a_pagar: vTotal,
+      ...regs[idx], ...body, ...calc, valor_a_pagar: vTotal, detalle_liquidacion: _liq.detalle,
       sede_nombre: DEFAULT_SEDES.find(s => s.id == body.sede_id)?.nombre || regs[idx].sede_nombre,
       coordinador_nombre: nombreCoordinadorPorId(body.coordinador_id) || regs[idx].coordinador_nombre
     };
@@ -876,7 +930,7 @@ function navigateTo(section) {
     sedes: { title: 'Sedes y Regionales', subtitle: 'Directorio de sedes operativas de Jardines del Renacer' },
     auxiliares: { title: 'Auxiliares de Cafetería', subtitle: 'Personal operativo de cafetería por sede' },
     coordinadores: { title: 'Gestión de Coordinadores', subtitle: 'Mantenimiento de coordinadores oficiales autorizados' },
-    tarifas: { title: 'Tarifas y Valores Anuales', subtitle: 'Configuración de tarifas hora diurna y nocturna' },
+    tarifas: { title: 'Tarifas y Valores Anuales', subtitle: 'Valor del turno de 12 h (día y noche) y de la hora adicional / fracción' },
     reportes: { title: 'Reportes y Consolidados', subtitle: 'Descarga y exportación de estados financieros' },
     auditoria: { title: 'Auditoría y Trazabilidad', subtitle: 'Registro cronológico inmutable de cambios y operaciones' },
     usuarios: { title: 'Usuarios del Sistema', subtitle: 'Administración de cuentas y roles' },
@@ -1139,8 +1193,12 @@ async function recalcularTarifasEnVivo() {
 
   if (res && res.total_horas !== undefined) {
     document.getElementById('reg-calc-total-horas').innerText = `${res.total_horas} h`;
-    document.getElementById('reg-calc-horas-diurnas').innerText = `${res.horas_diurnas} h ($${res.tarifa_hora_diurna.toLocaleString()}/h)`;
-    document.getElementById('reg-calc-horas-nocturnas').innerText = `${res.horas_nocturnas} h ($${res.tarifa_hora_nocturna.toLocaleString()}/h)`;
+    const base = res.turno === 'Turno Nocturno' ? res.tarifa_turno_noche : (res.turno === 'Turno Diurno' ? res.tarifa_turno_dia : null);
+    document.getElementById('reg-calc-horas-diurnas').innerText = res.modo === 'turno'
+      ? `Turno completo (12 h)` : `Fracción (menos de 12 h)`;
+    document.getElementById('reg-calc-horas-nocturnas').innerText = `${res.horas_diurnas} h día / ${res.horas_nocturnas} h noche`;
+    const det = document.getElementById('reg-calc-detalle');
+    if (det) det.innerText = res.detalle_liquidacion || '';
     document.getElementById('reg-calc-total-pagar').innerText = `$ ${Math.round(res.valor_a_pagar).toLocaleString()}`;
 
     const badge = document.getElementById('reg-calc-badge-turno');
@@ -1388,6 +1446,7 @@ function construirMensajeWhatsApp(reg) {
     `*Hora de salida:* ${reg.hora_salida || ''}`,
     `*Total de horas:* ${totalHoras ? totalHoras + ' h' : ''}`,
     `*Turno de cafetería:* ${(turno + ' ' + iconoTurno).trim()}`,
+    ...(reg.detalle_liquidacion ? [`*Liquidación:* ${reg.detalle_liquidacion}`] : []),
     linea,
     `📝 *Concepto:* ${concepto}`,
     '',
@@ -1500,13 +1559,14 @@ async function cargarTarifas() {
       <td><strong>${t.anio}</strong></td>
       <td>${escHtml(t.regional_nombre)}</td>
       <td>${escHtml(t.sede_nombre)}</td>
-      <td style="font-weight: 700; color: #166534;">$ ${Number(t.valor_hora_diurna).toLocaleString()} COP</td>
-      <td style="font-weight: 700; color: #1e40af;">$ ${Number(t.valor_hora_nocturna).toLocaleString()} COP</td>
+      <td style="font-weight: 700; color: #166534;">$ ${Number(t.valor_turno_dia || 0).toLocaleString('es-CO')} COP</td>
+      <td style="font-weight: 700; color: #1e40af;">$ ${Number(t.valor_turno_noche || 0).toLocaleString('es-CO')} COP</td>
+      <td style="font-weight: 700; color: #92400e;">$ ${Number(t.valor_hora_extra || 0).toLocaleString('es-CO')} COP</td>
       <td>${escHtml(t.vigencia_desde)} a ${escHtml(t.vigencia_hasta)}</td>
       <td><span class="badge ${t.activo ? 'badge-activo' : 'badge-anulado'}">${t.activo ? 'Vigente' : 'Inactiva'}</span></td>
       <td><button class="btn btn-sm btn-outline" onclick="editarTarifa(${t.id})">✏️ Editar</button></td>
     </tr>
-  `).join('') || '<tr><td colspan="8" style="text-align:center;">No hay tarifas para este año</td></tr>';
+  `).join('') || '<tr><td colspan="9" style="text-align:center;">No hay tarifas para este año</td></tr>';
 }
 
 function _prepararModalTarifa(t) {
@@ -1524,8 +1584,9 @@ function _prepararModalTarifa(t) {
   } else {
     sede.value = '';
   }
-  document.getElementById('modal-tarifa-diurna').value = editando ? t.valor_hora_diurna : 5900;
-  document.getElementById('modal-tarifa-nocturna').value = editando ? t.valor_hora_nocturna : 7500;
+  document.getElementById('modal-tarifa-diurna').value = editando ? (t.valor_turno_dia || TURNO_DIA_RESTO) : TURNO_DIA_RESTO;
+  document.getElementById('modal-tarifa-nocturna').value = editando ? (t.valor_turno_noche || TURNO_NOCHE_DEFECTO) : TURNO_NOCHE_DEFECTO;
+  document.getElementById('modal-tarifa-extra').value = editando ? (t.valor_hora_extra || HORA_EXTRA_DEFECTO) : HORA_EXTRA_DEFECTO;
   document.getElementById('modal-tarifa-estado').value = editando && !t.activo ? 'inactivo' : 'activo';
 }
 
@@ -1557,6 +1618,7 @@ async function guardarNuevaTarifa(e) {
     sede: sede.value ? sede.options[sede.selectedIndex].text : 'Todas las Sedes',
     diurna: Number(document.getElementById('modal-tarifa-diurna').value),
     nocturna: Number(document.getElementById('modal-tarifa-nocturna').value),
+    extra: Number(document.getElementById('modal-tarifa-extra').value),
     estado: document.getElementById('modal-tarifa-estado').value
   };
   btn.disabled = true;
@@ -1580,7 +1642,7 @@ async function abrirModalCopiarTarifas() {
   if (!origen.length) { showToast('No hay tarifas vigentes para copiar', 'danger'); return; }
   if (!confirm(`¿Copiar las tarifas de ${maxAnio} al año ${destino}?`)) return;
   for (const t of origen) {
-    const r = await enviarTarifa({ id: 0, anio: destino, sede: t.sede_nombre, diurna: t.valor_hora_diurna, nocturna: t.valor_hora_nocturna, estado: 'activo' });
+    const r = await enviarTarifa({ id: 0, anio: destino, sede: t.sede_nombre, diurna: t.valor_turno_dia, nocturna: t.valor_turno_noche, extra: t.valor_hora_extra, estado: 'activo' });
     if (!r.success) { showToast(r.error || 'No se pudo copiar', 'danger'); return; }
   }
   showToast(`Tarifas ${maxAnio} copiadas a ${destino}`, 'success');
