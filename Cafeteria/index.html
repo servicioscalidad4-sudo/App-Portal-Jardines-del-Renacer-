@@ -334,7 +334,7 @@
 
             <div class="kpi-card purple">
               <div class="kpi-info">
-                <p>Horas Diurnas / Nocturnas</p>
+                <p>Horas día / noche</p>
                 <h3 id="kpi-horas-desglose">0 / 0</h3>
               </div>
               <div class="kpi-icon">
@@ -458,18 +458,19 @@
                     <div id="reg-calc-total-horas" style="font-size: 16px; font-weight: 700;">12 h</div>
                   </div>
                   <div>
-                    <span style="color: var(--text-muted); font-size: 11px;">HORAS DIURNAS</span>
-                    <div id="reg-calc-horas-diurnas" style="font-weight: 600;">12 h ($5.900/h)</div>
+                    <span style="color: var(--text-muted); font-size: 11px;">TIPO DE LIQUIDACIÓN</span>
+                    <div id="reg-calc-horas-diurnas" style="font-weight: 600;">Turno completo (12 h)</div>
                   </div>
                   <div>
-                    <span style="color: var(--text-muted); font-size: 11px;">HORAS NOCTURNAS</span>
-                    <div id="reg-calc-horas-nocturnas" style="font-weight: 600;">0 h ($7.500/h)</div>
+                    <span style="color: var(--text-muted); font-size: 11px;">HORAS DÍA / NOCHE</span>
+                    <div id="reg-calc-horas-nocturnas" style="font-weight: 600;">12 h día / 0 h noche</div>
                   </div>
                   <div style="background: #ffffff; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--secondary);">
                     <span style="color: var(--secondary); font-size: 11px; font-weight: 700;">VALOR A PAGAR</span>
-                    <div id="reg-calc-total-pagar" style="font-size: 18px; font-weight: 800; color: var(--primary);">$70.800</div>
+                    <div id="reg-calc-total-pagar" style="font-size: 18px; font-weight: 800; color: var(--primary);">$85.000</div>
                   </div>
                 </div>
+                <div id="reg-calc-detalle" style="margin-top: 10px; font-size: 12px; color: var(--text-muted);"></div>
               </div>
 
               <div class="form-group" style="margin-bottom: 24px;">
@@ -713,8 +714,9 @@
                     <th>Año</th>
                     <th>Regional</th>
                     <th>Sede Aplicable</th>
-                    <th>Hora Diurna ($ COP)</th>
-                    <th>Hora Nocturna ($ COP)</th>
+                    <th>Turno Día 12 h ($ COP)</th>
+                    <th>Turno Noche 12 h ($ COP)</th>
+                    <th>Hora adicional / fracción ($ COP)</th>
                     <th>Vigencia</th>
                     <th>Estado</th>
                     <th>Acciones</th>
@@ -1062,20 +1064,25 @@
             </div>
           </div>
           <div class="form-group" style="margin-bottom: 12px;">
-            <label>Sede Específica (Dejar en blanco si aplica a toda la regional)</label>
+            <label>Sede Específica (en blanco = resto de municipios; Armenia y demás centros principales llevan tarifa propia)</label>
             <select id="modal-tarifa-sede" class="form-control">
               <option value="">Aplica a todas las sedes de la regional</option>
             </select>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label>Valor Hora Diurna ($ COP) *</label>
-              <input type="number" id="modal-tarifa-diurna" class="form-control" value="5900" required step="50">
+              <label>Turno Día 12 h ($ COP) *</label>
+              <input type="number" id="modal-tarifa-diurna" class="form-control" value="85000" required step="500">
             </div>
             <div class="form-group">
-              <label>Valor Hora Nocturna ($ COP) *</label>
-              <input type="number" id="modal-tarifa-nocturna" class="form-control" value="7500" required step="50">
+              <label>Turno Noche 12 h ($ COP) *</label>
+              <input type="number" id="modal-tarifa-nocturna" class="form-control" value="120000" required step="500">
             </div>
+          </div>
+          <div class="form-group" style="margin-top: 12px;">
+            <label>Hora adicional o fracción ($ COP) *</label>
+            <input type="number" id="modal-tarifa-extra" class="form-control" value="7900" required step="50">
+            <small style="color: var(--text-muted); font-size: 11px;">Se paga por cada hora que pase de 12 h, y por cada hora cuando el servicio dura menos de 12 h.</small>
           </div>
           <div class="form-group" style="margin-top: 12px;">
             <label>Estado</label>
