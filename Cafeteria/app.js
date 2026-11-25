@@ -142,6 +142,46 @@ function cargarCatalogoRemoto(force) {
   return catalogosPromise;
 }
 
+// ============================================================================
+// REGISTROS COMPARTIDOS: Google Sheets es la fuente de verdad
+// Descarga TODOS los registros de la hoja y reemplaza la copia local del navegador.
+// Si no hay conexión, se conserva la copia local.
+// ============================================================================
+let _ultimaCargaRegistros = 0;
+function normNombre(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+function registroDeSheets(r) {
+  const sedeId = sedeIdPorNombre(r.sede_nombre) ||
+    (DEFAULT_SEDES.find(x => normNombre(x.nombre) === normNombre(r.sede_nombre)) || {}).id || 0;
+  const coord = (state.coordinadores || getCatalogo('coordinadores'))
+    .find(c => normNombre((c.nombres || '') + ' ' + (c.apellidos || '')) === normNombre(r.coordinador_nombre));
+  return Object.assign({}, r, {
+    sede_id: sedeId,
+    coordinador_id: coord ? coord.id : '',
+    horas_diurnas: Number(r.horas_diurnas) || 0,
+    horas_nocturnas: Number(r.horas_nocturnas) || 0,
+    total_horas: Number(r.total_horas) || 0,
+    valor_a_pagar: Number(r.valor_a_pagar) || 0,
+    estado: r.estado || 'activo'
+  });
+}
+async function cargarRegistrosRemotos(force) {
+  if (!force && Date.now() - _ultimaCargaRegistros < 10000) return false;
+  try {
+    const r = await llamarSheets({ action: 'listRegistros' });
+    if (r && r.success && Array.isArray(r.registros)) {
+      saveClientRegistros(r.registros.map(registroDeSheets).sort((a, b) => b.id - a.id));
+      _ultimaCargaRegistros = Date.now();
+      return true;
+    }
+    console.warn('Registros remotos no disponibles:', r && r.error);
+  } catch (e) {
+    console.warn('Sin conexión con Google Sheets para registros, se usa la copia local', e);
+  }
+  return false;
+}
+
 // Vuelve a leer de Sheets y repuebla estado y listas desplegables
 async function refrescarCatalogos() {
   await cargarCatalogoRemoto(true);
@@ -506,7 +546,8 @@ function procesarSolicitudCliente(endpoint, method, body) {
       sede_nombre: DEFAULT_SEDES.find(s => s.id == body.sede_id)?.nombre || 'Armenia',
       coordinador_nombre: nombreCoordinadorPorId(body.coordinador_id) || 'Coordinador',
       usuario_creador: state.user ? state.user.usuario : '',
-      estado: 'activo'
+      estado: 'activo',
+      cid: 'c' + Date.now() + Math.random().toString(36).slice(2, 8)
     };
 
     regs.unshift(nuevo);
@@ -520,6 +561,7 @@ function procesarSolicitudCliente(endpoint, method, body) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'saveRegistro', ...nuevo, sede: nuevo.sede_nombre })
       });
+      setTimeout(() => cargarRegistrosRemotos(true), 4000);
     } catch (e) {}
 
     return { success: true, consecutivo, valor_a_pagar: vTotal, id: nextId };
@@ -738,6 +780,7 @@ async function inicializarApp() {
     cargarCoordinadores(),
     cargarAuxiliares()
   ]);
+  await cargarRegistrosRemotos(true);
 
   aplicarRestriccionSede();
   navigateTo('dashboard');
@@ -929,6 +972,7 @@ function poblarSelectAuxiliares() {
 // DASHBOARD ANALYTICS & CHARTS
 // ============================================================================
 async function loadDashboardStats() {
+  await cargarRegistrosRemotos();
   const anio = document.getElementById('dash-filter-anio').value;
   const mes = document.getElementById('dash-filter-mes').value;
   const sede_id = document.getElementById('dash-filter-sede').value;
@@ -1172,6 +1216,7 @@ function debounceBuscarRegistros() {
 
 async function cargarRegistros(page = 1) {
   state.registrosPage = page;
+  await cargarRegistrosRemotos();
 
   const search = (document.getElementById('filtro-search').value || '').toLowerCase();
   const sede_id = document.getElementById('filtro-sede').value;
